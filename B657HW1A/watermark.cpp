@@ -18,6 +18,11 @@
 
 using namespace std;
 
+const bool normalize_intensity = false;
+int l_CONST = 32;  // Number of bins
+double alpha_CONST = 45;
+double radius_fraction_CONST = 0.9;
+
 // This code requires that input be a *square* image, and that each dimension
 //  is a power of 2; i.e. that input.width() == input.height() == 2^k, where k
 //  is an integer. You'll need to pad out your image (with 0's) first if it's
@@ -58,6 +63,26 @@ SDoublePlane fft_magnitude(const SDoublePlane &fft_real, const SDoublePlane &fft
 		for (int j = 0; j < ncol; j++)
 			fft_mag[i][j] = calc_log_magnitude(fft_real[i][j], fft_imag[i][j]);
 	return fft_mag;
+}
+
+double get_max_intensity(const SDoublePlane &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	double max_intensity = -100;
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			if (input[i][j] > max_intensity)
+				max_intensity = input[i][j];
+	return max_intensity;
+}
+
+SDoublePlane normalize_spec_img(const SDoublePlane &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	double max_intensity = get_max_intensity(input);
+	SDoublePlane output(nrow, ncol);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[i][j] = input[i][j] / max_intensity * 255;
+	return output;
 }
 
 bool is_interference(int i, int j, SDoublePlane &fft_real, SDoublePlane &fft_imag, double threshold) {
@@ -114,56 +139,101 @@ SDoublePlane remove_interference(const SDoublePlane &input) {
 
 // Write this in Part 1.3 -- add watermark N to image
 SDoublePlane mark_image(const SDoublePlane &input, int N) {
-	int l = 8;  // Number of bins is l
-	double r = 100;  // Radius
-	double alpha = 10;
-
-
-	int nrow = input.rows(), ncol = input.cols();  // Since image is squared, I could have used only one of these.
-	// But using 2 numbers adds generality & readability to the code
+	int nrow = input.rows(), ncol = input.cols();
+	double r = nrow / 2 * radius_fraction_CONST;  // Radius
 	srandom(N);
-
-	double center = nrow / 2 - 0.5;
-	int v[l], topbin_x[l], topbin_y[l];
-	for (int i = 0; i < l; ++i)
+	int v[l_CONST], topbin_x[l_CONST], topbin_y[l_CONST];
+	for (int i = 0; i < l_CONST; ++i)
 		v[i] = random() % 2;
 
-	double theta = M_PI / (l + 1);
-	for (int i = 0; i < l; ++i) {
+	double center = nrow / 2 - 0.5;
+	double theta = M_PI / (l_CONST + 1);
+	for (int i = 0; i < l_CONST; ++i) {
 		topbin_x[i] = (int) (center - r * cos(i * theta));
 		topbin_y[i] = (int) (center + r * sin(i * theta));
 	}
 
-	//	int bottbin_x[l], bottbin_y[l];
-	//	for (int i = 0; i < l; ++i) {
-	//		bottbin_x[i] = nrow - 1 - topbin_x[i];
-	//		bottbin_y[i] = ncol - 1 - topbin_y[i];
-	//	}
-
 	SDoublePlane fft_real, fft_imag;
 	fft(input, fft_real, fft_imag);
 
-	for (int i = 0; i < l; ++i) {
+	for (int i = 0; i < l_CONST; ++i) {
 		// Top half of the circle
 		int row = topbin_x[i], col = topbin_y[i];
 		double intensity = fft_real[row][col];
-		fft_real[row][col] = intensity + alpha * fabs(intensity) * v[i];
+		fft_real[row][col] = intensity + alpha_CONST * v[i] * fabs(intensity);
 
 		// Bottom half of the circle
-		row = nrow - 1 - row;
-		col = ncol - 1 - col;
+		row = nrow - row;  // ?? computation
+		col = ncol - col;
 		intensity = fft_real[row][col];
-		fft_real[row][col] = intensity + alpha * fabs(intensity) * v[i];
+		fft_real[row][col] = intensity + alpha_CONST * v[i] * fabs(intensity);
 	}
 
 	SDoublePlane output_real;
 	ifft(fft_real, fft_imag, output_real);
+
+	/*printf("Binary vector v = (");
+	for (int i = 0; i < l_CONST; ++i)
+		printf("%d, ", v[i]);
+	printf("\b)");*/
 	return output_real;
 }
 
+bool check_mark_single_pixel(const SDoublePlane &input, int row, int col, int v) {
+	if (v == 0)
+		return true;
+
+	double prox_intensity = 0.125 * (
+			input[row - 1][col - 1] + input[row - 1][col] + input[row - 1][col + 1] +
+			input[row][col - 1] + input[row][col + 1] +
+			input[row + 1][col - 1] + input[row + 1][col] + input[row + 1][col + 1]
+	);
+	double thr = 0.5;
+	double intensity = input[row][col];
+	if (fabs(intensity - prox_intensity) > thr * alpha_CONST * fabs(prox_intensity))
+		return true;
+	return false;
+}
+
 // Write this in Part 1.3 -- check if watermark N is in image
-SDoublePlane check_image(const SDoublePlane &input, int N) {
-	return input;
+bool check_image(const SDoublePlane &input, int N) {
+	// Re-calculate the parameters used in mark part
+	int nrow = input.rows(), ncol = input.cols();
+	double r = nrow / 2 * radius_fraction_CONST;  // Radius
+	srandom(N);
+	int v[l_CONST], topbin_x[l_CONST], topbin_y[l_CONST];
+	int positive_v_count = 0;
+	for (int i = 0; i < l_CONST; ++i) {
+		int rand_num = random() % 2;
+		v[i] = rand_num;
+		positive_v_count += rand_num;
+	}
+
+	double center = nrow / 2 - 0.5;
+	double theta = M_PI / (l_CONST + 1);
+	for (int i = 0; i < l_CONST; ++i) {
+		topbin_x[i] = (int) (center - r * cos(i * theta));
+		topbin_y[i] = (int) (center + r * sin(i * theta));
+	}
+
+	SDoublePlane fft_real, fft_imag;
+	fft(input, fft_real, fft_imag);
+
+	int count = l_CONST * 2;
+	for (int i = 0; i < l_CONST; ++i) {
+		// Top half of the circle
+		int row = topbin_x[i], col = topbin_y[i];
+		if (!check_mark_single_pixel(fft_real, row, col, v[i]))
+			--count;
+
+		// Bottom half of the circle
+		row = nrow - row;  // ?? computation
+		col = ncol - col;
+		if (!check_mark_single_pixel(fft_real, row, col, v[i]))
+			--count;
+	}
+	printf("Detected watermark points: %d out of a total of %d\n", count - 2 * (l_CONST - positive_v_count), 2 * positive_v_count);
+	return count >= 2 * (l_CONST - positive_v_count + positive_v_count * 0.5);
 }
 
 
@@ -184,7 +254,7 @@ int main(int argc, char **argv)
 		cout << "In: " << inputFile <<"  Out: " << outputFile << endl;
 
 		SDoublePlane input_image = SImageIO::read_png_file(inputFile.c_str());
-
+		int N = atoi(argv[5]);
 		/*
 		 * Part 1.1
 		 */
@@ -194,6 +264,8 @@ int main(int argc, char **argv)
 			SDoublePlane fft_real, fft_imag;
 			fft(input_image, fft_real, fft_imag);
 			SDoublePlane spec_image = fft_magnitude(fft_real, fft_imag);
+			if (normalize_intensity)
+				spec_image = normalize_spec_img(spec_image);
 			SImageIO::write_png_file(outputFile.c_str(), spec_image, spec_image, spec_image);
 
 			/*
@@ -206,7 +278,7 @@ int main(int argc, char **argv)
 			double high_intensity_threshold = -1.5;
 			for (int i = 0; i < nrow; ++i) {
 				for (int j = 0; j < ncol; ++j) {
-					double pixel_intensity = spec_image[i][j];
+					double pixel_intensity = input_image[i][j];
 					fprintf(image_matrix, "%2.3f ", pixel_intensity);
 					if (pixel_intensity > high_intensity_threshold) {
 						cout << "The pixel (" << i << ", " << j << ") has high intensity " << pixel_intensity << endl;
@@ -292,13 +364,15 @@ int main(int argc, char **argv)
 			if(op == "add")
 			{
 				// add watermark
-				int N = atoi(argv[5]);
 				SDoublePlane output = mark_image(input_image, N);
 				SImageIO::write_png_file(outputFile.c_str(), output, output, output);
+				// printf("Image size: %d x %d\n", input_image.rows(), input_image.cols());
 			}
 			else if(op == "check")
 			{
 				// check watermark
+				printf(check_image(input_image, N) ? ">> Watermark exists" : ">> Watermark does not exist");
+				printf("\n===== ===== ===== ===== \n");
 			}
 			else
 				throw string("Bad operation!");
