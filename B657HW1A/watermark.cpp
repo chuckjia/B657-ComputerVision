@@ -57,7 +57,6 @@ SDoublePlane fft_magnitude(const SDoublePlane &fft_real, const SDoublePlane &fft
 	for (int i = 0; i < nrow; i++)
 		for (int j = 0; j < ncol; j++)
 			fft_mag[i][j] = calc_log_magnitude(fft_real[i][j], fft_imag[i][j]);
-
 	return fft_mag;
 }
 
@@ -77,8 +76,8 @@ void remove_interference_single_pixel(int i, int j, SDoublePlane &fft_real, SDou
 	int pixel_count = 0;
 	// Replace the pixel value by the average of the non-interfering cells in the the surrounding 8 cells
 	int row_range[] = {i - 1, i - 1, i - 1,
-						i,                i,
-						i + 1, i + 1, i + 1};
+			i,                i,
+			i + 1, i + 1, i + 1};
 	int col_range[] = {j - 1, j    , j + 1,
 			j - 1,        j + 1,
 			j - 1, j    , j + 1};
@@ -106,18 +105,66 @@ SDoublePlane remove_interference(const SDoublePlane &input) {
 		for (int j = 156; j <= 162; ++j)
 			remove_interference_single_pixel(i, j, fft_real, fft_imag);
 	for (int i = 352; i <= 356; ++i)
-			for (int j = 350; j <= 356; ++j)
-				remove_interference_single_pixel(i, j, fft_real, fft_imag);
+		for (int j = 350; j <= 356; ++j)
+			remove_interference_single_pixel(i, j, fft_real, fft_imag);
 	SDoublePlane output;
 	ifft(fft_real, fft_imag, output);
 	return output;
 }
 
 // Write this in Part 1.3 -- add watermark N to image
-SDoublePlane mark_image(const SDoublePlane &input, int N);
+SDoublePlane mark_image(const SDoublePlane &input, int N) {
+	int l = 8;  // Number of bins is l
+	double r = 100;  // Radius
+	double alpha = 10;
+
+
+	int nrow = input.rows(), ncol = input.cols();  // Since image is squared, I could have used only one of these.
+	// But using 2 numbers adds generality & readability to the code
+	srandom(N);
+
+	double center = nrow / 2 - 0.5;
+	int v[l], topbin_x[l], topbin_y[l];
+	for (int i = 0; i < l; ++i)
+		v[i] = random() % 2;
+
+	double theta = M_PI / (l + 1);
+	for (int i = 0; i < l; ++i) {
+		topbin_x[i] = (int) (center - r * cos(i * theta));
+		topbin_y[i] = (int) (center + r * sin(i * theta));
+	}
+
+	//	int bottbin_x[l], bottbin_y[l];
+	//	for (int i = 0; i < l; ++i) {
+	//		bottbin_x[i] = nrow - 1 - topbin_x[i];
+	//		bottbin_y[i] = ncol - 1 - topbin_y[i];
+	//	}
+
+	SDoublePlane fft_real, fft_imag;
+	fft(input, fft_real, fft_imag);
+
+	for (int i = 0; i < l; ++i) {
+		// Top half of the circle
+		int row = topbin_x[i], col = topbin_y[i];
+		double intensity = fft_real[row][col];
+		fft_real[row][col] = intensity + alpha * fabs(intensity) * v[i];
+
+		// Bottom half of the circle
+		row = nrow - 1 - row;
+		col = ncol - 1 - col;
+		intensity = fft_real[row][col];
+		fft_real[row][col] = intensity + alpha * fabs(intensity) * v[i];
+	}
+
+	SDoublePlane output_real;
+	ifft(fft_real, fft_imag, output_real);
+	return output_real;
+}
 
 // Write this in Part 1.3 -- check if watermark N is in image
-SDoublePlane check_image(const SDoublePlane &input, int N);
+SDoublePlane check_image(const SDoublePlane &input, int N) {
+	return input;
+}
 
 
 int main(int argc, char **argv)
@@ -245,6 +292,9 @@ int main(int argc, char **argv)
 			if(op == "add")
 			{
 				// add watermark
+				int N = atoi(argv[5]);
+				SDoublePlane output = mark_image(input_image, N);
+				SImageIO::write_png_file(outputFile.c_str(), output, output, output);
 			}
 			else if(op == "check")
 			{
@@ -252,8 +302,6 @@ int main(int argc, char **argv)
 			}
 			else
 				throw string("Bad operation!");
-
-			int N = atoi(argv[5]);
 		}
 		else
 			throw string("Bad part!");
