@@ -171,11 +171,6 @@ SDoublePlane mark_image(const SDoublePlane &input, int N) {
 
 	SDoublePlane output_real;
 	ifft(fft_real, fft_imag, output_real);
-
-	/*printf("Binary vector v = (");
-	for (int i = 0; i < l_CONST; ++i)
-		printf("%d, ", v[i]);
-	printf("\b)");*/
 	return output_real;
 }
 
@@ -267,76 +262,6 @@ int main(int argc, char **argv)
 			if (normalize_intensity)
 				spec_image = normalize_spec_img(spec_image);
 			SImageIO::write_png_file(outputFile.c_str(), spec_image, spec_image, spec_image);
-
-			/*
-			 * Testing 1: Analysis of the underlying matrix of image
-			 */
-			/*int nrow = spec_image.rows(), ncol = spec_image.cols();
-			cout << "Image size: " << spec_image.rows() << " x " << spec_image.cols() << endl;
-			FILE *image_matrix = fopen("image_matrix.txt", "wb");
-			int num_high_intensity_pt = 0;
-			double high_intensity_threshold = -1.5;
-			for (int i = 0; i < nrow; ++i) {
-				for (int j = 0; j < ncol; ++j) {
-					double pixel_intensity = input_image[i][j];
-					fprintf(image_matrix, "%2.3f ", pixel_intensity);
-					if (pixel_intensity > high_intensity_threshold) {
-						cout << "The pixel (" << i << ", " << j << ") has high intensity " << pixel_intensity << endl;
-						++num_high_intensity_pt;
-					}
-				}
-				fprintf(image_matrix, "\n\n\n");
-			}
-			fclose(image_matrix);
-			cout << "Total number of pixels: " << nrow * ncol
-					<< " | High intensity threshold set at > " << high_intensity_threshold << endl;
-			cout << "Total number of high intensity points is " << num_high_intensity_pt << endl;*/
-
-			/*
-			 * Testing 2: Find the intensity range of the interference pixels
-			 */
-			/*int nrow = spec_image.rows(), ncol = spec_image.cols();
-			double high_intensity_threshold = 0;
-			for (int i = 0; i < nrow; ++i)
-				for (int j = 0; j < ncol; ++j)
-					if (spec_image[i][j] < high_intensity_threshold)
-						spec_image[i][j] = -10;
-					else
-						spec_image[i][j] = 4;
-			string output_filename = "test_output.png";
-			SImageIO::write_png_file(output_filename.c_str(), spec_image, spec_image, spec_image);
-			printf("High intensity threshold = %1.4f\n", high_intensity_threshold);*/
-
-			/*
-			 * Testing 3: Find the intensity range of the interference pixels
-			 */
-			/*FILE *f = fopen("test_results/interference_area1.csv", "wb");
-			int low = 150, high = 170;
-			fprintf(f, "row/col,");
-			for (int j = low; j < high; ++j)
-				fprintf(f, "[:%d],", j);
-			fprintf(f, "\n");
-			for (int i = low; i < high; ++i) {
-				fprintf(f, "[%d:],", i);
-				for (int j = low; j < high; ++j)
-					fprintf(f, "%1.4f,", spec_image[i][j]);
-				fprintf(f, "\n");
-			}
-			fclose(f);
-
-			f = fopen("test_results/interference_area2.csv", "wb");
-			low = 340; high = 370;
-			fprintf(f, "row/col,");
-			for (int j = low; j < high; ++j)
-				fprintf(f, "[:%d],", j);
-			fprintf(f, "\n");
-			for (int i = low; i < high; ++i) {
-				fprintf(f, "[%d:],", i);
-				for (int j = low; j < high; ++j)
-					fprintf(f, "%1.4f,", spec_image[i][j]);
-				fprintf(f, "\n");
-			}
-			fclose(f);*/
 		}
 
 		/*
@@ -371,7 +296,7 @@ int main(int argc, char **argv)
 			else if(op == "check")
 			{
 				// check watermark
-				printf(check_image(input_image, N) ? ">> Watermark exists" : ">> Watermark does not exist");
+				printf(check_image(input_image, N) ? ">> Watermark exists" : ">> Watermark does NOT exist");
 				printf("\n===== ===== ===== ===== \n");
 			}
 			else
