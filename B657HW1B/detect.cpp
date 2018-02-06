@@ -146,27 +146,31 @@ SDoublePlane find_edges(const SDoublePlane &input, double thresh=0)
 
 // Pre-process image to eliminate noises
 SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDoublePlane &input_b) {
-	double lower = 20, upper = 90;
 	int nrow = input_r.rows(), ncol = input_r.cols();
 	SDoublePlane output(nrow, ncol);
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j) {
 			double r = input_r[i][j], g = input_g[i][j], b = input_b[i][j];
-			if (r > lower & r < upper & g > lower & g < upper & b > lower & b < upper) {
-				output[i][j] = 0;
-				// printf("%f\n", output[i][j]);
+			if (r < 100 || g < 100 || b < 100) {
+				double mean = 1. / 3 * (r + g + b),
+						var = 1. / 3 * (pow(r - mean, 2) + pow(g - mean, 2) + pow(b - mean, 2));
+				if (var < 150)
+					output[i][j] = 0;  // Black
+				else
+					output[i][j] = 255;  // White
 			} else
 				output[i][j] = 255;
 		}
 	SDoublePlane newoutput = output;
-	for (int i = 0; i < nrow; ++i)
-		for (int j = 0; j < ncol; ++j)
+	int num_layer = 3, max_i = nrow - num_layer - 1, max_j = ncol - num_layer - 1;
+	for (int i = num_layer; i < max_i; ++i)
+		for (int j = num_layer; j < max_j; ++j)
 			if (output[i][j] < 200) {
 				int white_count = 0;
-				for (int ii = 0; ii < 5; ++ii)
-					for (int jj = 0; jj < 5; ++jj)
-						white_count += output[i][j] > 200;
-				if (white_count > 13)
+				for (int ii = -num_layer; ii <= num_layer; ++ii)
+					for (int jj = -num_layer; jj <= num_layer; ++jj)
+						white_count += output[i + ii][j + ii] > 200;
+				if (white_count > 0.8 * pow(2 * num_layer + 1, 2))
 					newoutput[i][j] = 255;
 			}
 	return newoutput;
@@ -192,7 +196,8 @@ int main(int argc, char *argv[])
 			input_b(input_image.rows(), input_image.cols());
 	SImageIO::read_png_file(input_filename.c_str(), input_r, input_g, input_b);
 	SDoublePlane output_prep = preprocess(input_r, input_g, input_b);
-	string test_filename = "abc.png";
+	string test_filename = "prep_";
+	test_filename.append(input_filename);
 	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
 
 	// test step 2 by applying mean filters to the input image
