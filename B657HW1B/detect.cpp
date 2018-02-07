@@ -14,6 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
+#include <list>
 
 using namespace std;
 
@@ -100,10 +101,38 @@ void  write_detection_image(const string &filename, const vector<DetectedBox> &i
 //
 SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &row_filter, const SDoublePlane &col_filter)
 {
-	SDoublePlane output(input.rows(), input.cols());
-
 	// Convolution code here
+	int nrow = input.rows(), ncol = input.cols();
+	int row_ftr_len = row_filter.cols(), col_ftr_len = col_filter.rows();  // Size of the filters
 
+	// Row filter
+	SDoublePlane input_interm(nrow, ncol);
+	int fcenter = col_ftr_len / 2;
+	for (int i = 0; i < nrow; ++i) {
+		for (int j = 0; j < ncol; ++j) {
+			double sum = 0;
+			for (int k_ftr = 0; k_ftr < row_ftr_len; ++k_ftr) {
+				int k_img = j + fcenter - k_ftr;
+				sum += row_filter[0][k_ftr] *
+						((k_img < 0 || k_img >= ncol) ? input[i][j] : input[i][k_img]);
+			}
+			input_interm[i][j] = sum;
+		}
+	}
+	// Column filter
+	SDoublePlane output(nrow, ncol);
+	fcenter = col_ftr_len / 2;
+	for (int i = 0; i < nrow; ++i) {
+		for (int j = 0; j < ncol; ++j) {
+			double sum = 0;
+			for (int k_ftr = 0 ; k_ftr < col_ftr_len; ++k_ftr) {
+				int k_img = i + fcenter - k_ftr;
+				sum += col_filter[k_ftr][0] *
+						((k_img < 0 || k_img >= nrow) ? input[i][j] : input_interm[k_img][j]);
+			}
+			output[i][j] = sum;
+		}
+	}
 	return output;
 }
 
@@ -111,24 +140,49 @@ SDoublePlane convolve_separable(const SDoublePlane &input, const SDoublePlane &r
 //
 SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &filter)
 {
-	SDoublePlane output(input.rows(), input.cols());
-
 	// Convolution code here
-	int nrow_im = input.rows(), ncol_im = input.cols(), nrow_f = filter.rows(), ncol_f = filter.cols();
+	int nrow = input.rows(), ncol = input.cols(), nrow_ftr = filter.rows(), ncol_ftr = filter.cols();
+	SDoublePlane output(nrow, ncol);
 
+	int fcenter_row = nrow_ftr / 2, fcenter_col = ncol_ftr / 2;
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j) {
+			double sum = 0;
+			for (int ii = 0 ; ii < nrow_ftr; ++ii)
+				for (int jj = 0; jj < ncol_ftr; ++jj) {
+					int i_curr = i + fcenter_row - ii, j_curr = j + fcenter_col - jj;
+					sum += filter[ii][jj] * (
+							(i_curr < 0 || i_curr >= nrow || j_curr < 0 || j_curr >= ncol) ? input[i][j] : input[i_curr][j_curr]);
+				}
+			output[i][j] += sum;
+		}
 	return output;
 }
 
 
 // Apply a sobel operator to an image, returns the result
 // 
-SDoublePlane sobel_gradient_filter(const SDoublePlane &input, bool _gx)
+SDoublePlane sobel_gradient_filter(const SDoublePlane &input)
 {
-	SDoublePlane output(input.rows(), input.cols());
+	// Implement a sobel gradient estimation filter with 1-d filters
+	int nrow = input.rows(), ncol = input.cols();
+	SDoublePlane output(nrow, ncol);
+	SDoublePlane sobel_x(3,3);
+	sobel_x[0][0] = -1; sobel_x[0][1] = 0; sobel_x[0][2] = 1;
+	sobel_x[1][0] = -2; sobel_x[1][1] = 0; sobel_x[1][2] = 2;
+	sobel_x[2][0] = -1; sobel_x[2][1] = 0; sobel_x[2][2] = 1;
+
+	SDoublePlane sobel_y(3,3);
+	sobel_y[0][0] = -1; sobel_y[0][1] = -2; sobel_y[0][2] = -1;
+	sobel_y[1][0] = 0; sobel_y[1][1] = 0; sobel_y[1][2] = 0;
+	sobel_y[2][0] = 1; sobel_y[2][1] = 2; sobel_y[2][2] = 1;
 
 	// Implement a sobel gradient estimation filter with 1-d filters
-
-
+	SDoublePlane output_1 = convolve_general(input, sobel_x);
+	SDoublePlane output_2 = convolve_general(input, sobel_y);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[i][j] = sqrt(pow(output_1[i][j], 2) + pow(output_2[i][j], 2));
 	return output;
 }
 
@@ -176,6 +230,64 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 	return newoutput;
 }
 
+_DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
+	int th_tol = 3, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
+	double theta_unit = M_PI / 512;
+	int nrow = input.rows(), ncol = input.cols();
+	int horiz[th][nrow], vert[th][ncol];
+	for (int i = 0; i < th; ++i)
+		for (int j = 0; j < ncol; ++j)
+			horiz[i][j] = 0;
+	for (int i = 0; i < th; ++i)
+		for (int j = 0; j < nrow; ++j)
+			vert[i][j] = 0;
+	for (int x = 0; x < nrow; ++x)
+		for (int y = 0; y < ncol; ++y)
+			if (input[x][y]) {
+				for (int kk = -th_tol; kk < th_tol; ++kk) {
+					// Horizontal line, around normal theta = PI / 2
+					double theta = 0.5 * M_PI + kk * theta_unit;
+					int rho = (int) (x * cos(theta) + y * sin(theta));
+					if (rho >= 0 && rho < nrow)
+						horiz[kk + th_tol][int(rho)] += 1;
+					// Vertical line, around theta = PI / 2
+					theta = kk * theta_unit;
+					rho = (int) (x * cos(theta) + y * sin(theta));
+					if (rho >= 0 && rho < ncol)
+						vert[kk + th_tol][int(rho)] += 1;
+				}
+			}
+
+	// Find lines with high votes
+	int min_ed = (1 / 20.) * (input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
+
+	// Find horizontal lines
+	std::list<int> horiz_lines;  // With normal theta = PI / 2
+	for (int i = 0; i < nrow; ++i) {
+		int count = 0;
+		for (int jj = -th_tol; jj < th_tol; ++jj)
+			for (int kk = -th_tol; kk < th_tol; ++kk) {
+				count += horiz[jj][i + kk];
+				if (count > min_ed)
+					horiz_lines.push_back(i);
+			}
+	}
+
+	// Find vertical lines
+	std::list<int> vert_lines;
+	for (int i = 0; i < ncol; ++i) {
+		int count = 0;
+		for (int jj = -th_tol; jj < th_tol; ++jj)
+			for (int kk = -th_tol; kk < th_tol; ++kk) {
+				count += vert[jj][i + kk];
+				if (count > min_ed)
+					vert_lines.push_back(i);
+			}
+	}
+
+	return input;
+}
+
 
 //
 // This main file just outputs a few test images. You'll want to change it to do
@@ -191,21 +303,31 @@ int main(int argc, char *argv[])
 
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
+
+	/*
+	 * Testings
+	 */
+	string test_filename;
 	SDoublePlane input_r(input_image.rows(), input_image.cols()),
 			input_g(input_image.rows(), input_image.cols()),
 			input_b(input_image.rows(), input_image.cols());
 	SImageIO::read_png_file(input_filename.c_str(), input_r, input_g, input_b);
 	SDoublePlane output_prep = preprocess(input_r, input_g, input_b);
-	string test_filename = "prep_";
+	test_filename = "prep_";
 	test_filename.append(input_filename);
 	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
 
+	test_filename = "sobel_";
+	test_filename.append(input_filename);
+	output_prep = sobel_gradient_filter(output_prep);
+	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
+
 	// test step 2 by applying mean filters to the input image
-	SDoublePlane mean_filter(3,3);
+	/*SDoublePlane mean_filter(3,3);
 	for(int i=0; i<3; i++)
 		for(int j=0; j<3; j++)
 			mean_filter[i][j] = 1/9.0;
-	SDoublePlane output_image = convolve_general(input_image, mean_filter);
+	SDoublePlane output_image = convolve_general(input_image, mean_filter);*/
 
 
 	// randomly generate some detected ics -- you'll want to replace this
