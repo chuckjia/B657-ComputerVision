@@ -231,7 +231,7 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 }
 
 SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
-	int th_tol = 2, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
+	int th_tol = 3, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
 	double theta_unit = M_PI / 512;
 	int nrow = input.rows(), ncol = input.cols();
 	int horiz[th][nrow], vert[th][ncol];
@@ -262,9 +262,9 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 		}
 
 	// Find lines with high votes
-	int min_ed = (1 / 2.) * th *
-			(input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
-	printf("%d\n", min_ed);
+	int min_ed_horiz = (1 / 2.) * th * input.cols(),  // Minimum edge length
+			min_ed_vert = (1 / 2.) * th * input.rows();
+	printf("%d\n", min_ed_horiz);
 	// Find horizontal lines
 	std::list<int> horiz_lines;  // With normal theta = PI / 2
 	for (int rho = 0; rho < nrow; ++rho) {
@@ -272,7 +272,7 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 		for (int ii = 0; ii < th; ++ii)
 			for (int jj = -th_tol; jj < th_tol; ++jj)
 				count += (rho < -jj && rho + jj >= nrow) ? 0 : horiz[ii][rho + jj];
-		if (count > min_ed)
+		if (count > min_ed_horiz)
 			horiz_lines.push_back(rho);
 	}
 
@@ -283,7 +283,7 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 		for (int ii = 0; ii < th; ++ii)
 			for (int jj = -th_tol; jj < th_tol; ++jj)
 				count += (rho < -jj || rho + jj > ncol) ? 0 : vert[ii][rho + jj];
-		if (count > min_ed)
+		if (count > min_ed_vert)
 			vert_lines.push_back(rho);
 	}
 
@@ -291,13 +291,13 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 	for (std::list<int>::iterator it = horiz_lines.begin(); it != horiz_lines.end(); ++it) {
 		for (int j = 0; j < ncol; ++j)
 			output[*it][j] = 255;
-		std::cout << "Horizontal lines: " << *it << "\n";
+		// std::cout << "Horizontal lines: " << *it << "\n";
 	}
 	for (std::list<int>::iterator it = vert_lines.begin(); it != vert_lines.end(); ++it) {
 		for (int j = 0; j < nrow; ++j) {
 			output[j][*it] = 255;
 		}
-		std::cout << "Vertical lines: " << *it << "\n";
+		// std::cout << "Vertical lines: " << *it << "\n";
 	}
 	return output;
 }
@@ -334,12 +334,11 @@ int main(int argc, char *argv[])
 	test_filename = "sobel_";
 	test_filename.append(input_filename);
 	output_prep = sobel_gradient_filter(output_prep);
-	/*_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
+	_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j)
 			output_prep_bool[i][j] = output_prep[i][j] > 200;
-
-	output_prep = hough_transform(output_prep_bool);*/
+	output_prep = hough_transform(output_prep_bool);
 	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
 
 	// test step 2 by applying mean filters to the input image
