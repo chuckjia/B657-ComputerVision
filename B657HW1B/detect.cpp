@@ -230,20 +230,22 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 	return newoutput;
 }
 
-_DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
-	int th_tol = 3, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
+SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
+	int th_tol = 1, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
 	double theta_unit = M_PI / 512;
 	int nrow = input.rows(), ncol = input.cols();
 	int horiz[th][nrow], vert[th][ncol];
 	for (int i = 0; i < th; ++i)
-		for (int j = 0; j < ncol; ++j)
+		for (int j = 0; j < nrow; ++j)
 			horiz[i][j] = 0;
 	for (int i = 0; i < th; ++i)
-		for (int j = 0; j < nrow; ++j)
+		for (int j = 0; j < ncol; ++j)
 			vert[i][j] = 0;
-	for (int x = 0; x < nrow; ++x)
-		for (int y = 0; y < ncol; ++y)
-			if (input[x][y]) {
+
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j) {
+			int x = j, y = nrow - 1 - i;
+			if (input[y][x]) {
 				for (int kk = -th_tol; kk < th_tol; ++kk) {
 					// Horizontal line, around normal theta = PI / 2
 					double theta = 0.5 * M_PI + kk * theta_unit;
@@ -257,37 +259,47 @@ _DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
 						vert[kk + th_tol][int(rho)] += 1;
 				}
 			}
+		}
 
 	// Find lines with high votes
-	int min_ed = (1 / 20.) * (input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
+	int min_ed = 200; // (1 / 20.) * (input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
 
 	// Find horizontal lines
 	std::list<int> horiz_lines;  // With normal theta = PI / 2
-	for (int i = 0; i < nrow; ++i) {
+	for (int rho = 0; rho < nrow; ++rho) {
 		int count = 0;
-		for (int jj = -th_tol; jj < th_tol; ++jj)
-			for (int kk = -th_tol; kk < th_tol; ++kk) {
-				count += horiz[jj][i + kk];
-				if (count > min_ed)
-					horiz_lines.push_back(i);
-			}
+		for (int ii = 0; ii < th; ++ii)
+			for (int jj = -th_tol; jj < th_tol; ++jj)
+				count += (rho < -jj && rho + jj >= nrow) ? 0 : horiz[ii][rho + jj];
+		if (count > min_ed)
+			horiz_lines.push_back(rho);
 	}
 
 	// Find vertical lines
 	std::list<int> vert_lines;
-	for (int i = 0; i < ncol; ++i) {
+	for (int rho = 0; rho < ncol; ++rho) {
 		int count = 0;
-		for (int jj = -th_tol; jj < th_tol; ++jj)
-			for (int kk = -th_tol; kk < th_tol; ++kk) {
-				count += vert[jj][i + kk];
-				if (count > min_ed)
-					vert_lines.push_back(i);
-			}
+		for (int ii = 0; ii < th; ++ii)
+			for (int jj = -th_tol; jj < th_tol; ++jj)
+				count += (rho < -jj || rho + jj > ncol) ? 0 : vert[ii][rho + jj];
+		if (count > min_ed)
+			vert_lines.push_back(rho);
 	}
 
-	return input;
+	SDoublePlane output(nrow, ncol);
+	for (std::list<int>::iterator it = horiz_lines.begin(); it != horiz_lines.end(); ++it) {
+		for (int j = 0; j < ncol; ++j)
+			output[*it][j] = 255;
+		std::cout << "Horizontal lines: " << *it << "\n";
+	}
+	for (std::list<int>::iterator it = vert_lines.begin(); it != vert_lines.end(); ++it) {
+		for (int j = 0; j < nrow; ++j) {
+			output[j][*it] = 255;
+		}
+		std::cout << "Vertical lines: " << *it << "\n";
+	}
+	return output;
 }
-
 
 //
 // This main file just outputs a few test images. You'll want to change it to do
@@ -307,6 +319,7 @@ int main(int argc, char *argv[])
 	/*
 	 * Testings
 	 */
+	int nrow = input_image.rows(), ncol = input_image.cols();
 	string test_filename;
 	SDoublePlane input_r(input_image.rows(), input_image.cols()),
 			input_g(input_image.rows(), input_image.cols()),
@@ -320,6 +333,12 @@ int main(int argc, char *argv[])
 	test_filename = "sobel_";
 	test_filename.append(input_filename);
 	output_prep = sobel_gradient_filter(output_prep);
+	_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output_prep_bool[i][j] = output_prep[i][j] > 200;
+
+	output_prep = hough_transform(output_prep_bool);
 	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
 
 	// test step 2 by applying mean filters to the input image
