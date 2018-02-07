@@ -17,4 +17,8 @@ test: detect.cpp
 	./detect ic_7.png
 	./detect ic_8.png
 	./detect ic_9.png
+
+testhough: detect.cpp
+	g++ detect.cpp -o detect -lpng -I.
+	./detect ic_1.png
 	

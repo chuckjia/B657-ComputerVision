@@ -231,7 +231,7 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 }
 
 SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
-	int th_tol = 1, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
+	int th_tol = 2, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
 	double theta_unit = M_PI / 512;
 	int nrow = input.rows(), ncol = input.cols();
 	int horiz[th][nrow], vert[th][ncol];
@@ -262,8 +262,9 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 		}
 
 	// Find lines with high votes
-	int min_ed = 200; // (1 / 20.) * (input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
-
+	int min_ed = (1 / 2.) * th *
+			(input.rows() < input.cols() ? input.rows() : input.cols());  // Minimum edge length
+	printf("%d\n", min_ed);
 	// Find horizontal lines
 	std::list<int> horiz_lines;  // With normal theta = PI / 2
 	for (int rho = 0; rho < nrow; ++rho) {
@@ -333,12 +334,12 @@ int main(int argc, char *argv[])
 	test_filename = "sobel_";
 	test_filename.append(input_filename);
 	output_prep = sobel_gradient_filter(output_prep);
-	_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
+	/*_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j)
 			output_prep_bool[i][j] = output_prep[i][j] > 200;
 
-	output_prep = hough_transform(output_prep_bool);
+	output_prep = hough_transform(output_prep_bool);*/
 	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
 
 	// test step 2 by applying mean filters to the input image
