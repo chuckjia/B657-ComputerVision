@@ -92,7 +92,6 @@ void  write_detection_image(const string &filename, const vector<DetectedBox> &i
 }
 
 
-
 // The rest of these functions are incomplete. These are just suggestions to 
 // get you started -- feel free to add extra functions, change function
 // parameters, etc.
@@ -205,7 +204,7 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j) {
 			double r = input_r[i][j], g = input_g[i][j], b = input_b[i][j];
-			if (r < 100 || g < 100 || b < 100) {
+			if (r < 100 || g < 130 || b < 100) {
 				double mean = 1. / 3 * (r + g + b),
 						var = 1. / 3 * (pow(r - mean, 2) + pow(g - mean, 2) + pow(b - mean, 2));
 				if (var < 150)
@@ -224,54 +223,76 @@ SDoublePlane preprocess(const SDoublePlane &input_r, SDoublePlane &input_g, SDou
 				for (int ii = -num_layer; ii <= num_layer; ++ii)
 					for (int jj = -num_layer; jj <= num_layer; ++jj)
 						white_count += output[i + ii][j + ii] > 200;
-				if (white_count > 0.8 * pow(2 * num_layer + 1, 2))
+				if (white_count > 0.2 * pow(2 * num_layer + 1, 2))
 					newoutput[i][j] = 255;
 			}
+
+	// Check every column
+	for (int j = 0; j < ncol; ++j) {
+		int count = 0;
+		for (int i = 0; i < nrow; ++i)
+			count += newoutput[i][j] < 100;  // Choose black
+		if (count < nrow * 0.1)
+			for (int i = 0; i < nrow; ++i)
+				newoutput[i][j] = 255;
+	}
+	// Check every row
+	for (int i = 0; i < nrow; ++i) {
+		int count = 0;
+		for (int j = 0; j < ncol; ++j)
+			count += newoutput[i][j] < 100;  // Choose black
+		if (count < ncol * 0.1)
+			for (int j = 0; j < nrow; ++j)
+				newoutput[i][j] = 255;
+	}
 	return newoutput;
 }
 
-SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
-	int th_tol = 3, th = 2 * th_tol + 1;  // Max thickness of the edges/lines
-	double theta_unit = M_PI / 512;
-	int nrow = input.rows(), ncol = input.cols();
-	int horiz[th][nrow], vert[th][ncol];
-	for (int i = 0; i < th; ++i)
-		for (int j = 0; j < nrow; ++j)
-			horiz[i][j] = 0;
-	for (int i = 0; i < th; ++i)
-		for (int j = 0; j < ncol; ++j)
-			vert[i][j] = 0;
+
+_DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
+	const int th_rad = 1,   // Radius of theta interveal. Max thickness of HALF of the edges/lines in terms of number of theta units
+			th = 2 * th_rad + 1;  // Max thickness of the edges/lines in terms of theta
+	double theta_unit = M_PI / 512;  // Increment of theta
+
+	int nrow = input.rows(), ncol = input.cols(), horiz[th][nrow], vert[th][ncol];
+	for (int i = 0; i < th; ++i) {
+		for (int j = 0; j < nrow; ++j)  horiz[i][j] = 0;
+		for (int j = 0; j < ncol; ++j)  vert[i][j] = 0;
+	}
 
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j) {
 			int x = j, y = nrow - 1 - i;
 			if (input[y][x]) {
-				for (int kk = -th_tol; kk < th_tol; ++kk) {
+				for (int kk = -th_rad; kk < th_rad; ++kk) {
 					// Horizontal line, around normal theta = PI / 2
 					double theta = 0.5 * M_PI + kk * theta_unit;
 					int rho = (int) (x * cos(theta) + y * sin(theta));
 					if (rho >= 0 && rho < nrow)
-						horiz[kk + th_tol][int(rho)] += 1;
+						horiz[kk + th_rad][rho] += 1;
+
 					// Vertical line, around theta = PI / 2
 					theta = kk * theta_unit;
 					rho = (int) (x * cos(theta) + y * sin(theta));
 					if (rho >= 0 && rho < ncol)
-						vert[kk + th_tol][int(rho)] += 1;
+						vert[kk + th_rad][rho] += 1;
 				}
 			}
 		}
 
 	// Find lines with high votes
-	int min_ed_horiz = (1 / 2.) * th * input.cols(),  // Minimum edge length
-			min_ed_vert = (1 / 2.) * th * input.rows();
-	printf("%d\n", min_ed_horiz);
-	// Find horizontal lines
+	int min_ed_horiz = 200, //(4 / 5.) * th * input.cols(),  // Minimum edge length
+			min_ed_vert = 200; // (2 / 3.) * th * input.rows();
+	int bin_rad = 2,  // Radius of the bin of rho
+			bin_size = 2 * bin_rad + 1;
+
+	// Find horizontal lines and store them in a list of int consisting of rho values
 	std::list<int> horiz_lines;  // With normal theta = PI / 2
 	for (int rho = 0; rho < nrow; ++rho) {
 		int count = 0;
-		for (int ii = 0; ii < th; ++ii)
-			for (int jj = -th_tol; jj < th_tol; ++jj)
-				count += (rho < -jj && rho + jj >= nrow) ? 0 : horiz[ii][rho + jj];
+		for (int i = 0; i < th; ++i)  // Iterate over theta - eps to theta + eps
+			for (int j = -bin_size; j < bin_size; ++j) // Iterate
+				count += (rho + j < 0 && rho + j >= nrow) ? 0 : horiz[i][rho + j];
 		if (count > min_ed_horiz)
 			horiz_lines.push_back(rho);
 	}
@@ -280,26 +301,81 @@ SDoublePlane hough_transform(const _DTwoDimArray<bool> &input) {
 	std::list<int> vert_lines;
 	for (int rho = 0; rho < ncol; ++rho) {
 		int count = 0;
-		for (int ii = 0; ii < th; ++ii)
-			for (int jj = -th_tol; jj < th_tol; ++jj)
-				count += (rho < -jj || rho + jj > ncol) ? 0 : vert[ii][rho + jj];
+		for (int i = 0; i < th; ++i)
+			for (int j = -bin_size; j < bin_size; ++j)
+				count += (rho + j < 0 || rho + j > ncol) ? 0 : vert[i][rho + j];
 		if (count > min_ed_vert)
 			vert_lines.push_back(rho);
 	}
 
-	SDoublePlane output(nrow, ncol);
-	for (std::list<int>::iterator it = horiz_lines.begin(); it != horiz_lines.end(); ++it) {
+	_DTwoDimArray<bool> output(nrow, ncol);
+	memset(output.data_ptr(), 0, sizeof(bool) * nrow * ncol);
+
+	for (std::list<int>::iterator it = horiz_lines.begin(); it != horiz_lines.end(); ++it){
+		int row = *it;
 		for (int j = 0; j < ncol; ++j)
-			output[*it][j] = 255;
-		// std::cout << "Horizontal lines: " << *it << "\n";
+			output[row][j] = true;
 	}
+
 	for (std::list<int>::iterator it = vert_lines.begin(); it != vert_lines.end(); ++it) {
-		for (int j = 0; j < nrow; ++j) {
-			output[j][*it] = 255;
-		}
-		// std::cout << "Vertical lines: " << *it << "\n";
+		int col = *it;
+		for (int j = 0; j < nrow; ++j)
+			output[j][col] = true;
 	}
+	// std::cout << "Vertical lines: " << *it << "\n";
+
 	return output;
+}
+
+SDoublePlane bool_to_doubleplane(_DTwoDimArray<bool> &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	SDoublePlane output(nrow, ncol);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[i][j] = (input[i][j] ? 255 : 0);
+	return output;
+}
+
+_DTwoDimArray<bool> doubleplane_to_bool_black(SDoublePlane &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	_DTwoDimArray<bool> output(nrow, ncol);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[i][j] = input[i][j] < 100;  // True if black
+	return output;
+}
+
+double calc_true_frac(_DTwoDimArray<bool> &input, int i0, int i1, int j0, int j1) {
+	int count = 0;
+	for (int i = i0; i <= i1; ++i)
+		for (int j = j0; j <= j1; ++j)
+			count += input[i][j] ? 1 : 0;
+	return ((double) count) / ((i1 - i0 + 1) * (j1 - j0 + 1));
+}
+
+_DTwoDimArray<bool> slid_win(SDoublePlane &input) {
+	_DTwoDimArray<bool> input_bool = doubleplane_to_bool_black(input);
+	_DTwoDimArray<bool> ans(input.rows(), input.cols());
+	memset(ans.data_ptr(), 0, sizeof(bool) * ans.rows() * ans.cols());
+
+	int win_size = 10, check_size = 10;
+	double tol = 0.7;
+	int row_start = win_size, row_end = input.rows() - win_size - 1,
+			col_start = win_size, col_end = input.cols() - win_size - 1;
+	for (int i = row_start; i < row_end; i += win_size)
+		for (int j = col_start; j < col_end; j += win_size)
+			if (calc_true_frac(input_bool, i + 1, i + 1, j, j + check_size) > tol &&
+					calc_true_frac(input_bool, i, i + check_size, j + 1, j + 1) > tol)
+				for (int k = 1; k < win_size; ++k)
+					for (int kk = 1; kk < win_size; ++kk)
+						ans[i + k][j + kk] = true;
+	return ans;
+}
+
+
+
+void write_grayscale_png(const char* filename, const SDoublePlane &input) {
+	SImageIO::write_png_file(filename, input, input, input);
 }
 
 //
@@ -317,29 +393,111 @@ int main(int argc, char *argv[])
 	string input_filename(argv[1]);
 	SDoublePlane input_image= SImageIO::read_png_file(input_filename.c_str());
 
-	/*
-	 * Testings
-	 */
-	int nrow = input_image.rows(), ncol = input_image.cols();
-	string test_filename;
-	SDoublePlane input_r(input_image.rows(), input_image.cols()),
-			input_g(input_image.rows(), input_image.cols()),
-			input_b(input_image.rows(), input_image.cols());
-	SImageIO::read_png_file(input_filename.c_str(), input_r, input_g, input_b);
-	SDoublePlane output_prep = preprocess(input_r, input_g, input_b);
-	test_filename = "prep_";
-	test_filename.append(input_filename);
-	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
+	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
+	 * Test 1: Preprocess
+	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
 
-	test_filename = "sobel_";
-	test_filename.append(input_filename);
-	output_prep = sobel_gradient_filter(output_prep);
-	_DTwoDimArray<bool> output_prep_bool(nrow, ncol);
+	string IC_num = input_filename.substr(3, 1);
+	string test_filename;
+	int nrow = input_image.rows(), ncol = input_image.cols();
+	SDoublePlane input_r(nrow, ncol), input_g(nrow, ncol), input_b(nrow, ncol);
+	SImageIO::read_png_file(input_filename.c_str(), input_r, input_g, input_b);
+	SDoublePlane output_1 = preprocess(input_r, input_g, input_b);
+
+	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_01prep.png");
+	SImageIO::write_png_file(test_filename.c_str(), output_1, output_1, output_1);
+
+	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
+	 * Test 2: Sobel filter
+	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
+
+	/*test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_02sobel.png");
+	output_1 = sobel_gradient_filter(output_1);
+	write_grayscale_png(test_filename.c_str(), output_1);*/
+
+	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
+	 * Test 3: Hough transform
+	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
+
+	/*_DTwoDimArray<bool> output_bool_1(nrow, ncol);
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j)
-			output_prep_bool[i][j] = output_prep[i][j] > 200;
-	output_prep = hough_transform(output_prep_bool);
-	SImageIO::write_png_file(test_filename.c_str(), output_prep, output_prep, output_prep);
+			output_bool_1[i][j] = output_1[i][j] > 20;
+
+	output_bool_1 = hough_transform(output_bool_1);
+	output_1 = bool_to_doubleplane(output_bool_1);
+
+	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_03hough.png");
+	write_grayscale_png(test_filename.c_str(), output_1);*/
+
+	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
+	 * Test 4: Use middle line to represent beams
+	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
+
+	/* SDoublePlane output2(nrow, ncol);
+
+	// Intercept of horizontal lines / iterate along column 0
+	int first = 0;
+	bool accum = false;
+	for (int i = 0; i < nrow; ++i)
+		if (output_1[i][0] > 200)  // White
+			if (!accum) {
+				first = i;
+				accum = true;
+			} else { }
+		else { // Black
+			if (accum) {
+				// output2[(first + i - 1) / 2][0] = 255;
+				output2[first][0] = 255;
+				output2[i - 1][0] = 255;
+				first = i;
+				accum = false;
+			} else
+				++first;
+		}
+
+	// Intercept of vertical lines / iterate along row 0
+	first = 0;
+	accum = false;
+	for (int i = 0; i < ncol; ++i)
+		if (output_1[0][i] > 100)  // White
+			if (!accum) {
+				first = i;
+				accum = true;
+			} else {}
+		else {  // Black
+			if (accum) {
+				// output2[0][(first + i - 1) / 2] = 255;
+				output2[0][first] = 255;
+				output2[0][i - 1] = 255;
+				first = i;
+				accum = false;
+			} else
+				++first;
+		}
+
+	for (int i = 0; i < nrow; ++i)
+		if (output2[i][0] > 200)
+			for (int j = 0; j < ncol; ++j)
+				output2[i][j] = 255;
+
+	for (int j = 0; j < ncol; ++j)
+		if (output2[0][j] > 200)
+			for (int i = 0; i < nrow; ++i)
+				output2[i][j] = 255;
+
+	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_04shrunkLines.png");
+	write_grayscale_png(test_filename.c_str(), output2); */
+
+	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
+	 * Test 5
+	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
+
+	_DTwoDimArray<bool> output_2_bool = slid_win(output_1);
+	SDoublePlane output_slid_win = bool_to_doubleplane(output_2_bool);
+	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_05slidwin.png");
+	write_grayscale_png(test_filename.c_str(), output_slid_win);
+
 
 	// test step 2 by applying mean filters to the input image
 	/*SDoublePlane mean_filter(3,3);
