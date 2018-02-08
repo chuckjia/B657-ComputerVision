@@ -352,12 +352,14 @@ double calc_true_frac(_DTwoDimArray<bool> &input, int i0, int i1, int j0, int j1
 	return ((double) count) / ((i1 - i0 + 1) * (j1 - j0 + 1));
 }
 
+const int win_size = 5;
+
 _DTwoDimArray<bool> slid_win(SDoublePlane &input) {
 	_DTwoDimArray<bool> input_bool = doubleplane_to_bool_black(input);
 	_DTwoDimArray<bool> ans(input.rows(), input.cols());
 	memset(ans.data_ptr(), 0, sizeof(bool) * ans.rows() * ans.cols());
 
-	int win_size = 5, check_size = win_size;  // Check size is the size of the sequence to be checked in 1D subsampling
+	int check_size = win_size;  // Check size is the size of the sequence to be checked in 1D subsampling
 	double tol = 0.7;  // If the fraction of true points within one window passes tol, then the window will be marked true
 	int row_start = win_size, row_end = input.rows() - win_size - 1,
 			col_start = win_size, col_end = input.cols() - win_size - 1;
@@ -371,7 +373,7 @@ _DTwoDimArray<bool> slid_win(SDoublePlane &input) {
 	return ans;
 }
 
-vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
+vector<DetectedBox> draw_frame(_DTwoDimArray<bool> &input) {
 	int nrow = input.rows(), ncol = input.cols();
 	vector<DetectedBox> ans;
 	int row_start = win_size, row_end = input.rows() - win_size - 1,
@@ -450,7 +452,7 @@ vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
 					box.row = row - win_size;
 					box.col = first_col - win_size;
 					box.height = box_height;
-					box.width = box_width;
+					box.width = box_width + win_size;
 					box.confidence = 1;
 					ans.push_back(box);
 
@@ -465,6 +467,42 @@ vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
 		}
 	}
 	return ans;
+}
+
+_DTwoDimArray<bool> flip_image(_DTwoDimArray<bool> &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	_DTwoDimArray<bool> output(ncol, nrow);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[ncol - 1 - j][nrow - 1 - i] = input[i][j];
+	return output;
+}
+
+vector<DetectedBox> flip_detectedbox(const vector<DetectedBox> &input, int nrow, int ncol) {
+	vector<DetectedBox> output;
+	for(vector<DetectedBox>::const_iterator it = input.begin(); it != input.end(); ++it) {
+		DetectedBox box = *it;
+		DetectedBox newbox;
+		newbox.row = ncol - 1 - box.col;
+		newbox.col = nrow - 1 - box.row;
+		newbox.height = box.width;
+		newbox.width = box.height;
+		output.push_back(newbox);
+	}
+	return output;
+}
+
+vector<DetectedBox> post_proc_merge(const vector<DetectedBox> &input, int nrow, int ncol) {
+	_DTwoDimArray<bool> recon_img(nrow, ncol);  // Reconstructed image
+	memset(recon_img.data_ptr(), 0, sizeof(bool) * recon_img.rows() * recon_img.cols());
+	for(vector<DetectedBox>::const_iterator it = input.begin(); it != input.end(); ++it) {
+		DetectedBox box = *it;
+		int box_row = box.row, box_col = box.col, box_height = box.height, box_width = box.width;
+		for (int i = 0; i < box_height; ++i)
+			for (int j = 0; j < box_width; ++j)
+				recon_img[box_row + i][box_col + j] = true;
+	}
+	return draw_frame(recon_img);
 }
 
 
@@ -496,10 +534,10 @@ int main(int argc, char *argv[])
 	int nrow = input_image.rows(), ncol = input_image.cols();
 	SDoublePlane input_r(nrow, ncol), input_g(nrow, ncol), input_b(nrow, ncol);
 	SImageIO::read_png_file(input_filename.c_str(), input_r, input_g, input_b);
-	SDoublePlane output_1 = preprocess(input_r, input_g, input_b);
+	SDoublePlane output_preproc = preprocess(input_r, input_g, input_b);
 
 	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_01prep.png");
-	SImageIO::write_png_file(test_filename.c_str(), output_1, output_1, output_1);
+	SImageIO::write_png_file(test_filename.c_str(), output_preproc, output_preproc, output_preproc);
 
 	/* ===== ===== ===== ===== ===== ===== ===== ===== ===== =====
 	 * Test 2: Sobel filter
@@ -587,8 +625,8 @@ int main(int argc, char *argv[])
 	 * Test 5
 	 * ===== ===== ===== ===== ===== ===== ===== ===== ===== ===== */
 
-	_DTwoDimArray<bool> output_2_bool = slid_win(output_1);
-	SDoublePlane output_slid_win = bool_to_doubleplane(output_2_bool);
+	_DTwoDimArray<bool> output_preproc_bool = slid_win(output_preproc);
+	SDoublePlane output_slid_win = bool_to_doubleplane(output_preproc_bool);
 	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_05slidwin.png");
 	write_grayscale_png(test_filename.c_str(), output_slid_win);
 
@@ -602,7 +640,19 @@ int main(int argc, char *argv[])
 
 	// randomly generate some detected ics -- you'll want to replace this
 	//  with your ic detection code obviously!
-	vector<DetectedBox> ics = mark_win(output_2_bool, 5);
+
+	// Draw frames on the original image
+	vector<DetectedBox> ics = draw_frame(output_preproc_bool);
+
+	// Draw frames on the flipped image
+	/*_DTwoDimArray<bool> output_preproc_bool_flipped = flip_image(output_preproc_bool);
+	vector<DetectedBox> ics_flipped = draw_frame(output_preproc_bool);
+	ics_flipped = flip_detectedbox(ics_flipped, nrow, ncol);*/
+	// Combine the two results
+	/*ics.insert(ics.end(), ics_flipped.begin(), ics_flipped.end());*/
+
+	// Post-processing
+	ics = post_proc_merge(ics, input_image.rows(), input_image.cols());
 	/*for(int i=0; i<10; i++)
 	{
 		DetectedBox s;
