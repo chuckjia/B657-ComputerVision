@@ -263,7 +263,7 @@ _DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
 	for (int i = 0; i < nrow; ++i)
 		for (int j = 0; j < ncol; ++j) {
 			int x = j, y = nrow - 1 - i;
-			if (input[y][x]) {
+			if (input[y][x])
 				for (int kk = -th_rad; kk < th_rad; ++kk) {
 					// Horizontal line, around normal theta = PI / 2
 					double theta = 0.5 * M_PI + kk * theta_unit;
@@ -277,7 +277,6 @@ _DTwoDimArray<bool> hough_transform(const _DTwoDimArray<bool> &input) {
 					if (rho >= 0 && rho < ncol)
 						vert[kk + th_rad][rho] += 1;
 				}
-			}
 		}
 
 	// Find lines with high votes
@@ -358,20 +357,79 @@ _DTwoDimArray<bool> slid_win(SDoublePlane &input) {
 	_DTwoDimArray<bool> ans(input.rows(), input.cols());
 	memset(ans.data_ptr(), 0, sizeof(bool) * ans.rows() * ans.cols());
 
-	int win_size = 10, check_size = 10;
-	double tol = 0.7;
+	int win_size = 5, check_size = 10;  // Check size is the size of the sequence to be checked in 1D subsampling
+	double tol = 0.7;  // If the fraction of true points within one window passes tol, then the window will be marked true
 	int row_start = win_size, row_end = input.rows() - win_size - 1,
 			col_start = win_size, col_end = input.cols() - win_size - 1;
 	for (int i = row_start; i < row_end; i += win_size)
 		for (int j = col_start; j < col_end; j += win_size)
 			if (calc_true_frac(input_bool, i + 1, i + 1, j, j + check_size) > tol &&
-					calc_true_frac(input_bool, i, i + check_size, j + 1, j + 1) > tol)
-				for (int k = 1; k < win_size; ++k)
-					for (int kk = 1; kk < win_size; ++kk)
+					calc_true_frac(input_bool, i, i + check_size, j + 1, j + 1) > tol)  // Check row under the start corner and the col to the right the corner to avoid serrated edges
+				for (int k = 0; k < win_size; ++k)
+					for (int kk = 0; kk < win_size; ++kk)
 						ans[i + k][j + kk] = true;
 	return ans;
 }
 
+vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
+	int nrow = input.rows(), ncol = input.cols();
+	vector<DetectedBox> ans;
+	int row_start = win_size, row_end = input.rows() - win_size - 1,
+			col_start = win_size, col_end = input.cols() - win_size - 1;
+	int grid_nrow = (row_end - row_start) / win_size, grid_ncol = (col_end - col_start) / win_size;
+	_DTwoDimArray<bool> grid_unused(grid_nrow + 2, grid_ncol + 2);
+	memset(grid_unused.data_ptr(), 1, sizeof(bool) * grid_unused.rows() * grid_unused.cols());
+
+	for (int i = 0; i < grid_nrow; ++i) {
+		int row = row_start + i * win_size;
+		// printf("row = %d\n", row);
+
+		for (int j = 0; j < grid_ncol; ++j) {
+			int col = col_start + j * win_size;
+			if (input[row][col] && grid_unused[i][j]) {  // If a window beginning at (row, col) is marked as true
+				int score, score_tol = 2;
+				// Check rows below
+				int box_curr_row = i + 1, row_curr = row + win_size, last_row = row;
+				score = 0;
+				while (row_curr < row_end && score <= score_tol) {
+					if (!input[row_curr][col + win_size] || !grid_unused[box_curr_row][j + 1])  // If a window is false or used
+						++score;
+					else  // If a window is true
+						last_row = row_curr;
+					row_curr += win_size;
+					++box_curr_row;
+				}
+
+				// Check cols to the right
+				int box_curr_col = j + 1, col_curr = col + win_size, last_col = col;
+				score = 0;
+				while (col_curr < col_end && score <= score_tol) {
+					if (!input[row + win_size][col_curr] || !grid_unused[i + 1][box_curr_col])
+						++score;
+					else
+						last_col = col_curr;
+					col_curr += win_size;
+					++box_curr_col;
+				}
+
+				DetectedBox box;
+				box.row = row - win_size;
+				box.col = col - win_size;
+				box.height = last_row - row + 2 * win_size;
+				box.width = last_col - col + 2 * win_size;
+				box.confidence = 1;
+				ans.push_back(box);
+
+				int last_box_index_row = (last_row - row_start) / win_size + 1,
+						last_box_index_col = (last_col - col_start) / win_size + 1;
+				for (int ii = i; ii <= last_box_index_row; ++ii)
+					for (int jj = j; jj <= last_box_index_col; ++jj)
+						grid_unused[ii][jj] = false;
+			}
+		}
+	}
+	return ans;
+}
 
 
 void write_grayscale_png(const char* filename, const SDoublePlane &input) {
@@ -498,7 +556,6 @@ int main(int argc, char *argv[])
 	test_filename = "TT_IC"; test_filename.append(IC_num); test_filename.append("_05slidwin.png");
 	write_grayscale_png(test_filename.c_str(), output_slid_win);
 
-
 	// test step 2 by applying mean filters to the input image
 	/*SDoublePlane mean_filter(3,3);
 	for(int i=0; i<3; i++)
@@ -509,8 +566,8 @@ int main(int argc, char *argv[])
 
 	// randomly generate some detected ics -- you'll want to replace this
 	//  with your ic detection code obviously!
-	vector<DetectedBox> ics;
-	for(int i=0; i<10; i++)
+	vector<DetectedBox> ics = mark_win(output_2_bool, 5);
+	/*for(int i=0; i<10; i++)
 	{
 		DetectedBox s;
 		s.row = rand() % input_image.rows();
@@ -519,7 +576,7 @@ int main(int argc, char *argv[])
 		s.height = 20;
 		s.confidence = rand();
 		ics.push_back(s);
-	}
+	}*/
 
 	write_detection_txt("detected.txt", ics);
 	write_detection_image("detected.png", ics, input_image);

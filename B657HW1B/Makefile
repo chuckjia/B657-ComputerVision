@@ -20,5 +20,5 @@ test: detect.cpp
 
 test1: detect.cpp
 	g++ detect.cpp -o detect -lpng -I.
-	./detect ic_2.png
+	./detect ic_1.png
 	
