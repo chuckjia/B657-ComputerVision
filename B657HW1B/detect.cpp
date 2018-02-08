@@ -387,44 +387,70 @@ vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
 		for (int j = 0; j < grid_ncol; ++j) {
 			int col = col_start + j * win_size;
 			if (input[row][col] && grid_unused[i][j]) {  // If a window beginning at (row, col) is marked as true
-				int score, score_tol = 2;
-				// Check rows below
-				int box_curr_row = i + 1, row_curr = row + win_size, last_row = row;
+				int score, score_tol = 2;  // Do not move score_tol outside of inner loop. Value changes inside loop
+				// Check windows below along one column: col + win_size * slide_right
+				int i_curr = i + 1, row_curr = row + win_size, last_row = row;
+				int slide_right = 1;  // Checking the column this number to the right
+				int col_to_check = col + win_size * slide_right, j_to_check = j + slide_right;
 				score = 0;
 				while (row_curr < row_end && score <= score_tol) {
-					if (!input[row_curr][col + win_size] || !grid_unused[box_curr_row][j + 1])  // If a window is false or used
+					if (!input[row_curr][col_to_check] || !grid_unused[i_curr][j_to_check])  // If a window is false or used.
 						++score;
 					else  // If a window is true
 						last_row = row_curr;
-					row_curr += win_size;
-					++box_curr_row;
+					row_curr += win_size; ++i_curr;
 				}
 
-				// Check cols to the right
-				int box_curr_col = j + 1, col_curr = col + win_size, last_col = col;
+				// Check windows to the right along one row: row + win_size * slide_down
+				int j_curr = j + 1, col_curr = col + win_size, last_col = col;
+				int slide_down = 2;  // Checking the row this number below
+				int row_to_check = row + win_size * slide_down, i_to_check = i + slide_down;
 				score = 0;
 				while (col_curr < col_end && score <= score_tol) {
-					if (!input[row + win_size][col_curr] || !grid_unused[i + 1][box_curr_col])
+					if (!input[row_to_check][col_curr] || !grid_unused[i_to_check][j_curr])
 						++score;
 					else
 						last_col = col_curr;
 					col_curr += win_size;
-					++box_curr_col;
+					++j_curr;
 				}
 
-				DetectedBox box;
-				box.row = row - win_size;
-				box.col = col - win_size;
-				box.height = last_row - row + 2 * win_size;
-				box.width = last_col - col + 2 * win_size;
-				box.confidence = 1;
-				ans.push_back(box);
+				// Check windows to the left along one row: row + win_size * slide_down
+				int first_col = col;
+				j_curr = j - 1, col_curr = col - win_size;
+				slide_down = 1;  // Checking the row this number below
+				row_to_check = row + win_size * slide_down;
+				i_to_check = i + slide_down;
+				score = 0;
+				// score_tol = 1;
+				while (col_curr > col_start && score <= score_tol) {
+					if (!input[row_to_check][col_curr] || !grid_unused[i_to_check][j_curr])
+						++score;
+					else
+						first_col = col_curr;
+					col_curr -= win_size;
+					--j_curr;
+				}
 
-				int last_box_index_row = (last_row - row_start) / win_size + 1,
-						last_box_index_col = (last_col - col_start) / win_size + 1;
-				for (int ii = i; ii <= last_box_index_row; ++ii)
-					for (int jj = j; jj <= last_box_index_col; ++jj)
-						grid_unused[ii][jj] = false;
+				int box_height = last_row - row + 2 * win_size,
+						box_width = last_col - first_col + 2 * win_size;
+				int area_tol = 1 / 400. * input.rows() * input.cols();
+				if (box_height * box_width > area_tol && box_height < 3 * box_width && box_width < 3 * box_height) {
+					DetectedBox box;
+					box.row = row - win_size;
+					box.col = first_col - win_size;
+					box.height = box_height;
+					box.width = box_width;
+					box.confidence = 1;
+					ans.push_back(box);
+
+					int last_box_index_row = (last_row - row_start) / win_size + 1,
+							last_box_index_col = (last_col - col_start) / win_size + 1,
+							first_box_index_col = (first_col - col_start) / win_size + 1;
+					for (int ii = i - 1; ii <= last_box_index_row + 1; ++ii)
+						for (int jj = first_box_index_col - 1; jj <= last_box_index_col + 1; ++jj)
+							grid_unused[ii][jj] = false;
+				}
 			}
 		}
 	}
