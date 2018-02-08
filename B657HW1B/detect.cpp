@@ -357,7 +357,7 @@ _DTwoDimArray<bool> slid_win(SDoublePlane &input) {
 	_DTwoDimArray<bool> ans(input.rows(), input.cols());
 	memset(ans.data_ptr(), 0, sizeof(bool) * ans.rows() * ans.cols());
 
-	int win_size = 5, check_size = 10;  // Check size is the size of the sequence to be checked in 1D subsampling
+	int win_size = 5, check_size = win_size;  // Check size is the size of the sequence to be checked in 1D subsampling
 	double tol = 0.7;  // If the fraction of true points within one window passes tol, then the window will be marked true
 	int row_start = win_size, row_end = input.rows() - win_size - 1,
 			col_start = win_size, col_end = input.cols() - win_size - 1;
@@ -382,54 +382,64 @@ vector<DetectedBox> mark_win(_DTwoDimArray<bool> &input, int win_size) {
 
 	for (int i = 0; i < grid_nrow; ++i) {
 		int row = row_start + i * win_size;
-		// printf("row = %d\n", row);
 
 		for (int j = 0; j < grid_ncol; ++j) {
 			int col = col_start + j * win_size;
 			if (input[row][col] && grid_unused[i][j]) {  // If a window beginning at (row, col) is marked as true
-				int score, score_tol = 2;  // Do not move score_tol outside of inner loop. Value changes inside loop
+				int score, score_tol = 2, score_tol_relative;  // Do not move score_tol outside of inner loop. Value changes inside loop
+
 				// Check windows below along one column: col + win_size * slide_right
 				int i_curr = i + 1, row_curr = row + win_size, last_row = row;
-				int slide_right = 1;  // Checking the column this number to the right
+				int slide_right = 1;  // Checking the column this number of windows to the right
 				int col_to_check = col + win_size * slide_right, j_to_check = j + slide_right;
-				score = 0;
-				while (row_curr < row_end && score <= score_tol) {
-					if (!input[row_curr][col_to_check] || !grid_unused[i_curr][j_to_check])  // If a window is false or used.
+				score = 0; score_tol_relative = score_tol;
+				while (row_curr < row_end && score <= score_tol_relative) {
+					if (!(input[row_curr][col_to_check] && grid_unused[i_curr][j_to_check]) &&
+							!(input[row_curr][col] && grid_unused[i_curr][j]))  // If a window is false or used.
 						++score;
 					else  // If a window is true
 						last_row = row_curr;
 					row_curr += win_size; ++i_curr;
+					int curr_tol = (i_curr - i) * 0.1;
+					score_tol_relative = curr_tol > score_tol ? curr_tol : score_tol;
 				}
 
 				// Check windows to the right along one row: row + win_size * slide_down
 				int j_curr = j + 1, col_curr = col + win_size, last_col = col;
-				int slide_down = 2;  // Checking the row this number below
+				int slide_down = 1;  // Checking the row this number of windows below
 				int row_to_check = row + win_size * slide_down, i_to_check = i + slide_down;
-				score = 0;
-				while (col_curr < col_end && score <= score_tol) {
-					if (!input[row_to_check][col_curr] || !grid_unused[i_to_check][j_curr])
+				score = 0; score_tol_relative = score_tol;
+				while (col_curr < col_end && score <= score_tol_relative) {
+					if (!(input[row_to_check][col_curr] && grid_unused[i_to_check][j_curr]) &&
+							!(input[row][col_curr] && grid_unused[i][j_curr]))
 						++score;
 					else
 						last_col = col_curr;
 					col_curr += win_size;
 					++j_curr;
+					int curr_tol = (j_curr - j) * 0.1;
+					score_tol_relative = curr_tol > score_tol ? curr_tol : score_tol;
 				}
 
 				// Check windows to the left along one row: row + win_size * slide_down
 				int first_col = col;
 				j_curr = j - 1, col_curr = col - win_size;
-				slide_down = 1;  // Checking the row this number below
+				slide_down = 1;  // Checking the row this number of windows below
 				row_to_check = row + win_size * slide_down;
 				i_to_check = i + slide_down;
 				score = 0;
 				// score_tol = 1;
-				while (col_curr > col_start && score <= score_tol) {
-					if (!input[row_to_check][col_curr] || !grid_unused[i_to_check][j_curr])
+				score_tol_relative = score_tol;
+				while (col_curr > col_start && score <= score_tol_relative) {
+					if (!(input[row_to_check][col_curr] && grid_unused[i_to_check][j_curr]) &&
+							!(input[row_to_check][col_curr] && grid_unused[i_to_check][j_curr]))
 						++score;
 					else
 						first_col = col_curr;
 					col_curr -= win_size;
 					--j_curr;
+					int curr_tol = (j - j_curr) * 0.1;
+					score_tol_relative = curr_tol > score_tol ? curr_tol : score_tol;
 				}
 
 				int box_height = last_row - row + 2 * win_size,
@@ -605,5 +615,7 @@ int main(int argc, char *argv[])
 	}*/
 
 	write_detection_txt("detected.txt", ics);
-	write_detection_image("detected.png", ics, input_image);
+	test_filename = "Detected_IC"; test_filename.append(IC_num); test_filename.append(".png");
+	write_detection_image(test_filename, ics, input_image);
+	// write_detection_image("detected.png", ics, input_image);
 }
