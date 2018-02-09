@@ -6,19 +6,19 @@ watermark: watermark.cpp
 clean:
 	rm watermark 
 
-addcheck100: watermark.cpp
+testadd: watermark.cpp
 	g++ watermark.cpp -o watermark -O3 -lpng -I.
-	number = 1 ; while [[ $$number -le 10000 ]] ; do \
-        	echo Seed = $$number ; \
+	number=1 ; while [[ $$number -le 10000 ]] ; do \
+        	echo $$number ; \
 		./watermark 1.3 iu.png iu_marked.png add $$number ; \
-		./watermark 1.3 iu_marked.png no_file.png check $$number ; \
+		./watermark 1.3 iu_marked.png iu_marked.png check $$number ; \
         	((number = number + 100)) ; \
     	done
 
-checkother100: watermark.cpp
+testcheckother: watermark.cpp
 	g++ watermark.cpp -o watermark -O3 -lpng -I.
 	./watermark 1.3 iu.png iu_marked.png add 2; \
-	number = 1 ; while [[ $$number -le 10000 ]] ; do \
+	number=1 ; while [[ $$number -le 10000 ]] ; do \
         	echo Seed = $$number ; \
 		./watermark 1.3 iu_marked.png no_file.png check $$number ; \
         	((number = number + 100)) ; \

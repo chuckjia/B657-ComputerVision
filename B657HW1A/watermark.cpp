@@ -181,7 +181,7 @@ bool check_mark_single_pixel(const SDoublePlane &input, int row, int col, int v)
 			input[row][col - 1] + input[row][col + 1] +
 			input[row + 1][col - 1] + input[row + 1][col] + input[row + 1][col + 1]
 	);
-	double thr = 0.9;
+	double thr = 0.5;
 	double intensity = input[row][col];
 	if (fabs(intensity - prox_intensity) > thr * alpha_CONST * fabs(prox_intensity))
 		return true;
@@ -225,8 +225,9 @@ bool check_image(const SDoublePlane &input, int N) {
 		if (!check_mark_single_pixel(fft_real, row, col, v[i]))
 			--count;
 	}
+	double count_thr = 0.7;
 	printf("Detected watermark points: %d out of a total of %d\n", count - 2 * (l_CONST - positive_v_count), 2 * positive_v_count);
-	return count >= 2 * (l_CONST - positive_v_count + positive_v_count * 0.5);
+	return count >= 2 * (l_CONST - positive_v_count + positive_v_count * count_thr);
 }
 
 
