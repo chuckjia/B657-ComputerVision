@@ -3,7 +3,7 @@
 //
 // Based on skeleton code by D. Crandall, Spring 2018
 //
-// PUT YOUR NAMES HERE
+// Boli Fang, Chuck Jia, Haifeng Lin, Xinquan Wu
 //
 //
 
@@ -19,8 +19,8 @@
 using namespace std;
 
 const bool normalize_intensity = false;
-int l_CONST = 32;  // Number of bins
-double alpha_CONST = 45;
+int l_CONST = 64;  // Number of bins
+double alpha_CONST = 20;  // 1st try 45
 double radius_fraction_CONST = 0.9;
 
 // This code requires that input be a *square* image, and that each dimension
@@ -48,6 +48,28 @@ void ifft(const SDoublePlane &input_real, const SDoublePlane &input_imag, SDoubl
 
 	FFT_2D(0, output_real, output_imag);
 }
+
+// Add padding to image
+//
+SDoublePlane pad_zero(SDoublePlane &input) {
+	int nrow = input.rows(), ncol = input.cols();
+	int max = nrow > ncol ? nrow : ncol;
+	int k = 0, pow_of_2 = 1;
+	while (pow_of_2 < max) {
+		++k;
+		pow_of_2 *= 2;
+	}
+
+	if (max == nrow && pow_of_2 == ncol)
+		return input;
+
+	SDoublePlane output(pow_of_2, pow_of_2);
+	for (int i = 0; i < nrow; ++i)
+		for (int j = 0; j < ncol; ++j)
+			output[i][j] = input[i][j];
+	return output;
+}
+
 
 // Calculate the log of the norm of a complex number real + i * imag
 double calc_log_magnitude(double real, double imag) {
@@ -92,46 +114,22 @@ bool is_interference(int i, int j, SDoublePlane &fft_real, SDoublePlane &fft_ima
 	return false;
 }
 
-void remove_interference_single_pixel(int i, int j, SDoublePlane &fft_real, SDoublePlane &fft_imag) {
-	double threshold = 0;
-	if (!is_interference(i, j, fft_real, fft_imag, threshold))  // Is not interference
-		return;
-
-	double new_real = 0, new_imag = 0;
-	int pixel_count = 0;
-	// Replace the pixel value by the average of the non-interfering cells in the the surrounding 8 cells
-	int row_range[] = {i - 1, i - 1, i - 1,
-			i,                i,
-			i + 1, i + 1, i + 1};
-	int col_range[] = {j - 1, j    , j + 1,
-			j - 1,        j + 1,
-			j - 1, j    , j + 1};
-
-	for (int k = 0; k < 8; k++) {
-		int row = row_range[k], col = col_range[k];
-		if (!is_interference(row, col, fft_real, fft_imag, threshold)) {
-			new_real += fft_real[row][col];
-			new_imag += fft_imag[row][col];
-			pixel_count++;
-		}
-	}
-	if (pixel_count > 0) {
-		fft_real[i][j] = new_real / pixel_count;
-		fft_imag[i][j] = new_imag / pixel_count;
-	}
-}
-
 // Write this in Part 1.2
 SDoublePlane remove_interference(const SDoublePlane &input) {
+	int nrow = input.rows(), ncol = input.cols();
 	SDoublePlane fft_real, fft_imag;
 	fft(input, fft_real, fft_imag);
 
 	for (int i = 156; i <= 160; ++i)
-		for (int j = 156; j <= 162; ++j)
-			remove_interference_single_pixel(i, j, fft_real, fft_imag);
+		for (int j = 0; j <= ncol; ++j) {
+			fft_real[i][j] = 0.5 * (fft_real[155][j] + fft_real[161][j]);
+			fft_imag[i][j] = 0.5 * (fft_imag[155][j] + fft_imag[161][j]);
+		}
 	for (int i = 352; i <= 356; ++i)
-		for (int j = 350; j <= 356; ++j)
-			remove_interference_single_pixel(i, j, fft_real, fft_imag);
+		for (int j = 0; j <= ncol; ++j) {
+			fft_real[i][j] = 0.5 * (fft_real[351][j] + fft_real[357][j]);
+			fft_imag[i][j] = 0.5 * (fft_imag[351][j] + fft_imag[357][j]);
+		}
 	SDoublePlane output;
 	ifft(fft_real, fft_imag, output);
 	return output;
@@ -183,7 +181,7 @@ bool check_mark_single_pixel(const SDoublePlane &input, int row, int col, int v)
 			input[row][col - 1] + input[row][col + 1] +
 			input[row + 1][col - 1] + input[row + 1][col] + input[row + 1][col + 1]
 	);
-	double thr = 0.5;
+	double thr = 0.9;
 	double intensity = input[row][col];
 	if (fabs(intensity - prox_intensity) > thr * alpha_CONST * fabs(prox_intensity))
 		return true;
@@ -249,6 +247,8 @@ int main(int argc, char **argv)
 		cout << "In: " << inputFile <<"  Out: " << outputFile << endl;
 
 		SDoublePlane input_image = SImageIO::read_png_file(inputFile.c_str());
+		input_image = pad_zero(input_image);
+		// printf("Image size = %d x %d\n", input_image.rows(), input_image.cols());
 		int N = atoi(argv[5]);
 		/*
 		 * Part 1.1
