@@ -178,7 +178,7 @@ SDoublePlane convolve_general(const SDoublePlane &input, const SDoublePlane &fil
 
 // Apply a sobel operator to an image, returns the result
 // 
-// Author: Haifeng Lin, Xinquan Wu
+// Author: Chuck Jia, Haifeng Lin, Xinquan Wu
 //
 SDoublePlane sobel_gradient_filter(const SDoublePlane &input)
 {
