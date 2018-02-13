@@ -172,6 +172,7 @@ SDoublePlane mark_image(const SDoublePlane &input, int N) {
 	return output_real;
 }
 
+// Check if one pixel is a mark
 bool check_mark_single_pixel(const SDoublePlane &input, int row, int col, int v) {
 	if (v == 0)
 		return true;
