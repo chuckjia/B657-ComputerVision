@@ -58,22 +58,17 @@ CImg<double> create_kernel(double mat[], int ndim) {
 	return kernel;
 }
 
-void write_img_to_file(CImg<double> img, const char *filename) {
+void write_img_to_file(CImg<double> &img, const char *filename) {
 	img.normalize(0, 255).save(filename);
 }
 
-void write_level_img_to_file(CImg<double> img, const char *file_prefix, int level) {
+void write_level_img_to_file(CImg<double> &img, const char *file_prefix, int level) {
 	char filename[30];
 	sprintf(filename, "z_output/%s_level_%d.jpg", file_prefix, level);
 	img.normalize(0, 255).save(filename);
 }
 
 void blend() {
-	int num_level = 5;
-	CImg<double> M[num_level], L1[num_level], L2[num_level], G1[num_level], G2[num_level], LB[num_level];
-	M[0] = CImg<double>("images/part2/mask.jpg");
-	G1[0] = CImg<double>("images/part2/apple.jpg");
-	G2[0]= CImg<double>("images/part2/orange.jpg");
 
 	/*cimg_forXY(prev_Mask, x, y) {
 		// printf("(%d, %d) = (%f, %f, %f)\n",
@@ -100,68 +95,124 @@ void blend() {
 
 	CImg<double> laplacian_filter = create_kernel(laplacian_mat, 5);
 
+
+	int num_level = 6;
+	CImg<double> M[num_level], L1[num_level], L2[num_level], G1[num_level], G2[num_level], LB[num_level];
+
+
+	/*
+	 * Creating Gaussian pyramids
+	 */
+
+	// M[0] = CImg<double>("images/part2/mask.jpg");
+	G1[0] = CImg<double>("images/part2/apple.jpg");
+	G2[0]= CImg<double>("images/part2/orange.jpg");
+	M[0] = CImg<double>(G1[0].width(), G1[0].height(), 1, 3);
+
+	int orig_width = G1[0].width();
+
+	cimg_forXY(G1[0], x, y) {
+		int right = (2 * x < orig_width) * 255;
+		for (int kk = 0; kk < 3; ++kk)
+			M[0](x, y, 0, kk) = right;
+	}
+	write_level_img_to_file(M[0], "M", 0);
+
 	for (int level = 1; level < num_level; ++level)  {
 		int prev_level = level - 1;
-		CImg<double> gauss_G1 = G1[level].get_convolve(gauss_filter);
+		CImg<double> gauss_M = M[prev_level].get_convolve(gauss_filter);
+		CImg<double> gauss_G1 = G1[prev_level].get_convolve(gauss_filter);
+		CImg<double> gauss_G2 = G2[prev_level].get_convolve(gauss_filter);
 
 		// Sub-sample
-		int new_width = gauss_G1.width() / 2 - 1, new_height = gauss_G1.height() / 2 - 1;
-		cimg_forXY(gauss_G1)
-	}
+		int new_width = gauss_M.width() / 2 - 1, new_height = gauss_M.height() / 2 - 1;
+		M[level] = CImg<double>(new_width, new_height, 1, 3);
+		G1[level] = CImg<double>(new_width, new_height, 1, 3);
+		G2[level] = CImg<double>(new_width, new_height, 1, 3);
 
-	for (int level = 1; level < num_level; ++level) {
-		// Apply filters
-		prev_Mask.convolve(gauss_filter);
-		prev_L1.convolve(laplacian_filter);
-		prev_L2.convolve(laplacian_filter);
-
-		// Sub-sample
-		int new_width = prev_Mask.width() / 2 - 1, new_height = prev_Mask.height() / 2 - 1;
-		CImg<double> Mask(new_width, new_height, 1, 3),
-				L1(new_width, new_height, 1, 3),
-				L2(new_width, new_height, 1, 3);
-
-		cimg_forXY(Mask, new_x, new_y) {
+		cimg_forXY(M[level], new_x, new_y) {
 			int x = new_x * 2, y = new_y * 2;
 			for (int kk = 0; kk < 3; ++kk) {
-				Mask(new_x, new_y, 0, kk) = prev_Mask(x, y, 0, kk);
-				L1(new_x, new_y, 0, kk) = prev_L1(x, y, 0, kk);
-				L2(new_x, new_y, 0, kk) = prev_L2(x, y, 0, kk);
+				M[level](new_x, new_y, 0, kk) = gauss_M(x, y, 0, kk);
+				G1[level](new_x, new_y, 0, kk) = gauss_G1(x, y, 0, kk);
+				G2[level](new_x, new_y, 0, kk) = gauss_G2(x, y, 0, kk);
 			}
 		}
-
-		LB[level] = L1.get_mul(Mask)  - L2.get_mul(Mask - 255);
-		write_level_img_to_file(Mask, "Mask", level);
-		write_level_img_to_file(L1, "L1", level);
-		write_level_img_to_file(L2, "L2", level);
-		write_level_img_to_file(LB[level], "LB", level);
-		prev_Mask = Mask;
-		prev_L1 = L1;
-		prev_L2 = L2;
+		write_level_img_to_file(M[level], "M", level);
+		write_level_img_to_file(G1[level], "G1", level);
+		write_level_img_to_file(G2[level], "G2", level);
 	}
 
+	/*
+	 * Creating Laplacian pyramids
+	 */
+
+	int last_level = num_level - 1;
+	for (int level = 0; level < last_level; ++level)  {
+		int new_width = G1[level].width(), new_height = G1[level].height();
+		L1[level] = G1[level] - G1[level].get_convolve(gauss_filter);
+		L2[level] = G2[level] - G2[level].get_convolve(gauss_filter);
+
+		// int next_level = level + 1;
+		/*cimg_forXY(G1[level], x, y) {
+			bool not_from_upscale = (x % 2) || (y % 2);
+			for (int kk = 0; kk < 3; ++kk) {
+				L1[level](x, y, 0, kk) = G1[level](x, y, 0, kk) - (not_from_upscale ? 0 : G1[next_level](x / 2, y / 2, 0, kk));
+				L2[level](x, y, 0, kk) = G2[level](x, y, 0, kk) - (not_from_upscale ? 0 : G2[next_level](x / 2, y / 2, 0, kk));
+			}
+		}*/
+		write_level_img_to_file(L1[level], "L1", level);
+		write_level_img_to_file(L2[level], "L2", level);
+	}
+
+	L1[last_level] = G1[last_level];
+	L2[last_level] = G2[last_level];
+
+	/*
+	 *	Creating "blended" Laplacian pyramid
+	 */
+
+	for (int level = 0; level < num_level; ++level) {
+		LB[level] = CImg<double>(M[level].width(), M[level].height(), 1, 3);
+		// CImg<double> left = L1[level].get_mul(M[level]), right = L2[level].get_mul(1 - M[level]);
+		cimg_forXY(M[level], x, y) {
+			for (int kk = 0; kk < 3; ++kk) {
+				double M_val = M[level](x, y, 0, kk);
+				LB[level](x, y, 0, kk) = L1[level](x, y, 0, kk) * M_val / 255. + L2[level](x, y, 0, kk) * (255 - M_val) / 255.;
+			}
+		}
+		// LB[level] = L1[level].get_mul(M[level]) + L2[level].get_mul(1 - M[level]);
+		//write_level_img_to_file(left, "left", level);
+		//write_level_img_to_file(right, "right", level);
+		write_level_img_to_file(LB[level], "LB", level);
+	}
+
+	/*
+	 *	Combining all images
+	 */
 	for (int i = 0; i < 25; ++i)
 		gauss_mat[i] *= 4;
 	CImg<double> new_kernel = create_kernel(gauss_mat, 5);
 
 	for (int level = num_level - 1; level > 0; --level) {
-		int new_width = LB[level - 1].width(), new_height = LB[level - 1].height();
-		CImg<double> LB_enlarged(new_width, new_height, 1, 3, 0);
+		printf("Level no. %d", level);
+		int prev_level = level - 1;
+		int new_width = LB[prev_level].width(), new_height = LB[prev_level].height();
+
+		// Upscaling
+		CImg<double> new_img(new_width, new_height, 1, 3, 0);
 		cimg_forXY(LB[level], x, y) {
 			int new_x = 2 * x, new_y = 2 * y;
 			for (int kk = 0; kk < 3; ++kk)
-				LB_enlarged(new_x, new_y, 0, kk) = LB[level](x, y, 0, kk);
+				new_img(new_x, new_y, 0, kk) = LB[level](x, y, 0, kk);
 		}
-		write_level_img_to_file(LB_enlarged, "LB_enlarged", level);
-		LB[level - 1] += LB_enlarged.get_convolve(new_kernel);
-		write_level_img_to_file(LB[level], "LB_test", level);
+		new_img.convolve(gauss_filter);
+
+		LB[prev_level] += LB[level].get_resize(LB[prev_level], 3);
+		write_level_img_to_file(LB[prev_level], "Final_LB", prev_level);
 	}
 
-	CImg<double> newMask("images/part2/mask.jpg"),
-				newL1("images/part2/apple.jpg"),
-				newL2("images/part2/orange.jpg");
-	LB[0] = prev_L1.get_mul(newMask) - prev_L2.get_mul(newMask - 255);
-	write_img_to_file(LB[0], "z_output/result.jpg");
+
 }
 
 int main()//int argc, char **argv)
