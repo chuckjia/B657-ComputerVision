@@ -51,9 +51,8 @@ CImg<double> create_kernel(double mat[], int ndim) {
 	for (int i = 0; i < ndim; ++i)
 		for (int j = 0; j < ndim; ++j) {
 			double pixel_val = mat[i * ndim + j];
-			kernel(i, j, 0, 0) = pixel_val;
-			kernel(i, j, 0, 1) = pixel_val;
-			kernel(i, j, 0, 2) = pixel_val;
+			for (int kk = 0; kk < 3; ++kk)
+				kernel(i, j, 0, kk) = pixel_val;
 		}
 	return kernel;
 }
@@ -66,6 +65,28 @@ void write_level_img_to_file(CImg<double> &img, const char *file_prefix, int lev
 	char filename[30];
 	sprintf(filename, "z_output/%s_level_%d.jpg", file_prefix, level);
 	img.normalize(0, 255).save(filename);
+}
+
+void write_img_mat_to_file(CImg<double> &img, const char *file_prefix) {
+	char r_name[30], g_name[30], b_name[30];
+	sprintf(r_name, "z_output/%s_R.csv", file_prefix);
+	sprintf(g_name, "z_output/%s_G.csv", file_prefix);
+	sprintf(b_name, "z_output/%s_B.csv", file_prefix);
+	FILE *rf = fopen(r_name, "wb");
+	FILE *gf = fopen(g_name, "wb");
+	FILE *bf = fopen(b_name, "wb");
+	int width = img.width(), height = img.height();
+	for (int x = 0; x < width; ++x) {
+		for (int y = 0; y < height; ++y) {
+			fprintf(rf, "%3.4f ", img(x, y, 0, 0));
+			fprintf(gf, "%3.4f ", img(x, y, 0, 1));
+			fprintf(bf, "%3.4f ", img(x, y, 0, 2));
+		}
+		fprintf(rf, "\n");
+		fprintf(gf, "\n");
+		fprintf(bf, "\n");
+	}
+	fclose(rf); fclose(gf); fclose(bf);
 }
 
 void blend() {
@@ -86,6 +107,8 @@ void blend() {
 	for (int i = 0; i < 25; ++i)
 		gauss_mat[i] *= 1 / 256.;
 	CImg<double> gauss_filter = create_kernel(gauss_mat, 5);
+
+	// write_img_mat_to_file(gauss_filter, "gauss_filter");
 
 	// Laplacian kernel
 	double laplacian_mat[25];
@@ -111,7 +134,7 @@ void blend() {
 
 	int orig_width = G1[0].width();
 
-	cimg_forXY(G1[0], x, y) {
+	cimg_forXY(M[0], x, y) {
 		int right = (2 * x < orig_width) * 255;
 		for (int kk = 0; kk < 3; ++kk)
 			M[0](x, y, 0, kk) = right;
@@ -125,7 +148,7 @@ void blend() {
 		CImg<double> gauss_G2 = G2[prev_level].get_convolve(gauss_filter);
 
 		// Sub-sample
-		int new_width = gauss_M.width() / 2 - 1, new_height = gauss_M.height() / 2 - 1;
+		int new_width = gauss_M.width() / 2, new_height = gauss_M.height() / 2;
 		M[level] = CImg<double>(new_width, new_height, 1, 3);
 		G1[level] = CImg<double>(new_width, new_height, 1, 3);
 		G2[level] = CImg<double>(new_width, new_height, 1, 3);
@@ -208,7 +231,8 @@ void blend() {
 		}
 		new_img.convolve(gauss_filter);
 
-		LB[prev_level] += LB[level].get_resize(LB[prev_level], 3);
+		// LB[prev_level] += LB[level].get_resize(LB[prev_level], 3);
+		LB[prev_level] += new_img;
 		write_level_img_to_file(LB[prev_level], "Final_LB", prev_level);
 	}
 
