@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 			}*/
 
 			// Blending
-			blend(left_img, right_img, mask_img, 1);
+			blend(left_img, right_img, mask_img, 5, true);
 		}
 		else if(part == "part3"){
 			// RANSAC

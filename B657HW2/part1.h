@@ -75,14 +75,12 @@ void solving_homography(double pointsA[4][2], double pointsB[4][2], double* homo
 			coeff(i, j, 0, 0) = right[j];
 		}
 		result[i] = coeff.det() / deter;
-		for (int j = 0; j < 8; ++j) {
+		for (int j = 0; j < 8; ++j)
 			coeff(i, j, 0, 0) = tempt[j];
-		}
 	}
 	// set output array
-	for (int i = 0; i < 8; ++i) {
+	for (int i = 0; i < 8; ++i)
 		homography[i] = result[i];
-	}
 	homography[8] = 1.0;
 }
 
@@ -92,11 +90,10 @@ CImg<double> inverseWarpping(CImg<double> orig_img, CImg<double> new_img, double
 	solving_homography(new_coor, orig_coor, (double*)homography);
 	double Trans[3][3];
 	int index = 0;
-	for (int i = 0; i < 3; i++) {
-		for (int j = 0; j < 3; j++) {
+	for (int i = 0; i < 3; i++)
+		for (int j = 0; j < 3; j++)
 			Trans[i][j] = homography[index++];
-		}
-	}
+
 	cimg_forXYC(new_img,x,y,c) {
 		double orig_coor[] = {x,y,1};
 		double new_coor[3];

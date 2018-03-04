@@ -67,7 +67,7 @@ void write_img_mat_to_file(CImg<double> &img, const char *file_prefix) {
 //        mask_img is the mask image. Its pixel values are in {0, 255} with 0 representing one image and 255 the other
 //        print_result is a bool, indicating if the pyramid images and the result images are to be printed as files
 // Output: The blended image as a CImg object
-CImg<double> blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_img, bool print_result) {
+CImg<double> blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_img, int num_level, bool print_result) {
 	/*
 	 * Create filters need in blending
 	 */
@@ -88,8 +88,6 @@ CImg<double> blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double>
 	/*
 	 * Pyramid blending
 	 */
-
-	int num_level = 5;  // Number of levels used in pyramids
 	CImg<double> M[num_level], G1[num_level], G2[num_level];  // M, G1, G2 are Gaussian pyramids for the mask, image 1 and image 2
 
 	/*
