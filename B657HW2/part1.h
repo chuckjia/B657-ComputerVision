@@ -101,11 +101,10 @@ CImg<double> inverseWarpping(CImg<double> orig_img, CImg<double> new_img, double
 		double orig_coor[] = {x,y,1};
 		double new_coor[3];
 		matrix_multiplication(Trans, orig_coor, new_coor);
-		double n_x = new_coor[0]/new_coor[2];
-		double n_y = new_coor[1]/new_coor[2];
-		if (n_x >= 0 && n_x < orig_img.width() && n_y >= 0 && n_y < orig_img.height()) {
+		double n_x = new_coor[0] / new_coor[2];
+		double n_y = new_coor[1] / new_coor[2];
+		if (n_x >= 0 && n_x < orig_img.width() && n_y >= 0 && n_y < orig_img.height())
 			new_img(x, y, 0, c) = orig_img(n_x, n_y, 0, c);
-		}
 	}
 	return new_img;
 }
@@ -118,7 +117,7 @@ void func_part1(string poster_img) {
 	CImg<double> book2("images/part1/book2.jpg");
 	CImg<double> book2_warped(book2.width(), book2.height(), 1, 3);
 
-	//Caluculating transform matrix
+	//Calculating transform matrix
 	double pointsA[4][2] = {{318, 256}, {534, 372}, {316, 670}, {73, 473}};
 	double pointsB[4][2] = {{141, 131}, {480, 159}, {493, 630}, {64, 601}};
 	book2_warped = inverseWarpping(book2, book2_warped, pointsB, pointsA);

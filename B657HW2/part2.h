@@ -62,7 +62,12 @@ void write_img_mat_to_file(CImg<double> &img, const char *file_prefix) {
 	fclose(rf); fclose(gf); fclose(bf);
 }
 
-void blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_img) {
+// Blend two images using a mask image
+// Input: left_img, right_img are the two images to blend
+//        mask_img is the mask image. Its pixel values are in {0, 255} with 0 representing one image and 255 the other
+//        print_result is a bool, indicating if the pyramid images and the result images are to be printed as files
+// Output: The blended image as a CImg object
+CImg<double> blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_img, bool print_result) {
 	/*
 	 * Create filters need in blending
 	 */
@@ -118,11 +123,12 @@ void blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_im
 	}
 
 	// Write the Gaussian pyramids to file
-	for (int level = 0; level < num_level; ++level) {
-		write_level_img_to_file(M[level], "M", level);
-		write_level_img_to_file(G1[level], "G1", level);
-		write_level_img_to_file(G2[level], "G2", level);
-	}
+	if (print_result)
+		for (int level = 0; level < num_level; ++level) {
+			write_level_img_to_file(M[level], "M", level);
+			write_level_img_to_file(G1[level], "G1", level);
+			write_level_img_to_file(G2[level], "G2", level);
+		}
 
 	/*
 	 * Create Laplacian pyramids
@@ -139,10 +145,11 @@ void blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_im
 	L2[last_level] = G2[last_level];
 
 	// Write the Laplacian pyramids to file
-	for (int level = 0; level < num_level; ++level) {
-		write_level_img_to_file(L1[level], "L1", level);
-		write_level_img_to_file(L2[level], "L2", level);
-	}
+	if (print_result)
+		for (int level = 0; level < num_level; ++level) {
+			write_level_img_to_file(L1[level], "L1", level);
+			write_level_img_to_file(L2[level], "L2", level);
+		}
 
 	/*
 	 *	Creating "blended" Laplacian pyramid
@@ -160,8 +167,9 @@ void blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_im
 	}
 
 	// Write the pyramid to file
-	for (int level = 0; level < num_level; ++level)
-		write_level_img_to_file(LB[level], "LB", level);
+	if (print_result)
+		for (int level = 0; level < num_level; ++level)
+			write_level_img_to_file(LB[level], "LB", level);
 
 	/*
 	 *	Combine all images
@@ -184,7 +192,9 @@ void blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double> mask_im
 		// write_level_img_to_file(LB[prev_level], "Final_LB", prev_level);
 	}
 
-	write_img_to_file_unnormalized(LB[0], "z_output/Final_Result.jpg");
+	if (print_result)
+		write_img_to_file_unnormalized(LB[0], "z_output/Final_Result.jpg");
+	return LB[0];
 }
 
 #endif /* PART2_H_ */
