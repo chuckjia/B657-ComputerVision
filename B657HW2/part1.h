@@ -27,7 +27,7 @@ double TansformMatrixInvert[3][3] = { {1.1246685805, -0.3146766040, 222.940925},
 		{0.1088390506, 0.6850586647, -19.924695},
 		{0.0002645872, -0.0005970689, 1.082785} };
 
-//Transform matrix calculate
+// Transformation matrix calculation
 void solving_homography(double pointsA[4][2], double pointsB[4][2], double* homography) {
 	// Cramer's rule
 	// ax + by + cz = j          | a b c |
@@ -117,7 +117,7 @@ void func_part1(string poster_img) {
 	//1.2
 	CImg<double> book2("images/part1/book2.jpg");
 	CImg<double> book2_warped(book2.width(), book2.height(), 1, 3);
-	//lincoln_warped.fill(0);
+
 	//Caluculating transform matrix
 	double pointsA[4][2] = {{318, 256}, {534, 372}, {316, 670}, {73, 473}};
 	double pointsB[4][2] = {{141, 131}, {480, 159}, {493, 630}, {64, 601}};

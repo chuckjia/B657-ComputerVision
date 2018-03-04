@@ -14,78 +14,63 @@
 void draw_descriptor_image(CImg<double> image,
 		const vector<SiftDescriptor> descriptors, const char *filename);
 
-inline int linear_interp(int x1, int x2, int y1, int y2, int x) {
+int linear_interp(int x1, int x2, int y1, int y2, int x) {
 	return y1 + (x - x1) * (y2 - y1) / (x2 - x1);
 }
 
-CImg<double> merge_images(CImg<double> image1, CImg<double> image2) {
+CImg<double> merge_images(CImg<double> img1, CImg<double> img2) {
 	// merge 2 images into 1
-	int w1 = image1.width(), w2 = image2.width(), w = w1 + w2;
-	int h = image1.height();
-	int c = image1.spectrum();
+	int w1 = img1.width(), w2 = img2.width(), w = w1 + w2;
+	int h = img1.height(), c = img1.spectrum();
 	CImg<double> image(w, h, 1, 3);
 
-	for (int k = 0; k < c; ++k) {
+	for (int kk = 0; kk < c; ++kk)
 		for (int j = 0; j < h; ++j) {
-			for (int i = 0; i < w1; ++i) {
-				image(i, j, 0, k) = image1(i, j, 0, k);
-			}
-			for (int i = 0; i < w2; ++i) {
-				image(i + w1, j, 0, k) = image2(i, j, 0, k);
-			}
+			for (int i = 0; i < w1; ++i)
+				image(i, j, 0, kk) = img1(i, j, 0, kk);
+			for (int i = 0; i < w2; ++i)
+				image(i + w1, j, 0, kk) = img2(i, j, 0, kk);
 		}
-	}
 	return image;
 }
 
-void draw_match_lines(CImg<double> image_1, CImg<double> image_2,
-		vector<pair<SiftDescriptor, SiftDescriptor> > &descr, string outFile) {
-
-//	// shift row index of second image
-//	int n = descr.size();
-//	double wid = image_1.width();
-//	for (int i = 0; i < n; ++i) {
-//		descr[i].second.col += wid;
-//	}
+void draw_match_lines(CImg<double> img1, CImg<double> img2,
+		vector<pair<SiftDescriptor, SiftDescriptor>> &descr, string filename) {
 
 	// merge 2 images into 1
-	CImg<double> image = merge_images(image_1, image_2);
+	CImg<double> image = merge_images(img1, img2);
 
 	// draw a line for each match pair
-	int n = descr.size();
-	double wid = image_1.width();
-	for (int i = 0; i < n; ++i) {
-		int c1 = descr[i].first.col, c2 = wid + descr[i].second.col;
-		int r1 = descr[i].first.row, r2 = descr[i].second.row;
-		double color_point[] = {255.0, 255.0, 0};
-		for (int j = c1; j <= c2; ++j) {
-			int k = linear_interp(c1, c2, r1, r2, j);
-			for (int l = 0; l < 3; ++l) {
-				image(j, k, 0, l) = color_point[l];
-			}
+	int n = descr.size(), width = img1.width();
+	double color_point[] = {255.0, 255.0, 0};
+	for (int d_no = 0; d_no < n; ++d_no) {
+		int c1 = descr[d_no].first.col, c2 = width + descr[d_no].second.col;
+		int r1 = descr[d_no].first.row, r2 = descr[d_no].second.row;
+		for (int x = c1; x <= c2; ++x) {
+			int y = linear_interp(c1, c2, r1, r2, x);
+			for (int kk = 0; kk < 3; ++kk)
+				image(x, y, 0, kk) = color_point[kk];
 		}
 	}
-	image.save(outFile.c_str());
+	image.save(filename.c_str());
 }
 
 void calc_match_pairs(vector<SiftDescriptor> &descr_src, vector<SiftDescriptor> &descr_dst,
 		vector<pair<SiftDescriptor, SiftDescriptor> > &descr_match, double threshold) {
-
-	// calculate matches (closed / second-closed < threshold)
-	//vector<pair<SiftDescriptor, SiftDescriptor> > descr_match;
-	int dim_i = descr_src.size();
-	int dim_j = descr_dst.size();
-	for (int i = 0; i < dim_i; ++i) {
+	// Calculate matches (closest / second-closest < threshold)
+	int dim_src = descr_src.size(), dim_dst = descr_dst.size();
+	for (int i = 0; i < dim_src; ++i) {
 		int match_index = 0;
-		double closest = 1e+5, second = 1e+5;
-		SiftDescriptor des_i = descr_src[i];
-		for (int j = 0; j < dim_j; ++j) {
+		double closest = 1e10, second = closest;
+
+		SiftDescriptor descr_i = descr_src[i];
+		for (int j = 0; j < dim_dst; ++j) {
 			double dist = 0.0;
-			SiftDescriptor des_j = descr_dst[j];
-			for (int k = 0; k < 128; ++k) {
-				dist += pow(des_i.descriptor[k] - des_j.descriptor[k], 2.);
-			}
+			SiftDescriptor descr_j = descr_dst[j];
+			for (int k = 0; k < 128; ++k)
+				dist += pow(descr_i.descriptor[k] - descr_j.descriptor[k], 2);
 			dist = sqrt(dist);
+
 			if (dist < closest) {
 				second = closest;
 				closest = dist;
@@ -94,21 +79,11 @@ void calc_match_pairs(vector<SiftDescriptor> &descr_src, vector<SiftDescriptor> 
 				second = dist;
 			}
 		}
-		if (closest / second < threshold) {
-			descr_match.push_back(pair<SiftDescriptor, SiftDescriptor>(des_i,
+		if (closest / second < threshold)
+			descr_match.push_back(pair<SiftDescriptor, SiftDescriptor>(descr_i,
 					descr_dst[match_index]));
-		}
 	}
 	printf("descr_match.size() = %d\n", descr_match.size());
-
-//	// separate each points in each image
-//	int n = descr_match.size();
-//	descr_src.clear();
-//	descr_dst.clear();
-//	for (int i = 0; i < n; ++i) {
-//		descr_src.push_back(descr_match[i].first);
-//		descr_dst.push_back(descr_match[i].second);
-//	}
 }
 
 void ransac(vector<pair<SiftDescriptor, SiftDescriptor> > &descr, double diff) {

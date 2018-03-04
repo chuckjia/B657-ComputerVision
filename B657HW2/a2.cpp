@@ -36,7 +36,7 @@ void draw_descriptor_image(CImg<double> image, const vector<SiftDescriptor> desc
 	image.get_normalize(0,255).save(filename);
 }
 
-int main()//int argc, char **argv)
+int main(int argc, char **argv)
 {
 	try {
 
