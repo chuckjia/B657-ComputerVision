@@ -35,7 +35,7 @@ CImg<double> merge_images(CImg<double> img1, CImg<double> img2) {
 }
 
 void draw_match_lines(CImg<double> img1, CImg<double> img2,
-		vector<pair<SiftDescriptor, SiftDescriptor>> &descr, string filename) {
+		vector<pair<SiftDescriptor, SiftDescriptor> > &descr, string filename) {
 
 	// merge 2 images into 1
 	CImg<double> image = merge_images(img1, img2);

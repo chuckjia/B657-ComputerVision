@@ -35,7 +35,7 @@ void write_img_to_file_unnormalized(CImg<double> &img, const char *filename) {
 // Write one level of a pyramid to image file
 void write_level_img_to_file(CImg<double> &img, const char *file_prefix, int level) {
 	char filename[30];
-	sprintf(filename, "z_output/%s_level_%d.jpg", file_prefix, level);
+	sprintf(filename, "part2_output/%s_level_%d.jpg", file_prefix, level);
 	img.get_normalize(0, 255).save(filename);
 }
 
@@ -193,7 +193,7 @@ CImg<double> blend(CImg<double> &left_img, CImg<double> &right_img, CImg<double>
 	}
 
 	if (print_result)
-		write_img_to_file_unnormalized(LB[0], "z_output/Final_Result.jpg");
+		write_img_to_file_unnormalized(LB[0], "part2_output/Final_Result.jpg");
 	return LB[0];
 }
 
