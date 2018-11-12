@@ -38,6 +38,19 @@ void draw_descriptor_image(CImg<double> image, const vector<SiftDescriptor> desc
 
 int main(int argc, char **argv)
 {
+	if(argc < 6)
+	{
+		cout << "Insufficent number of arguments; correct usage:" << endl;
+		cout << "    a2 partID image1 image2 mask num_level" << endl;
+		return -1;
+	}
+	string part = argv[1];
+	string img1_name = argv[2];
+	string img2_name = argv[3];
+	string mask_name = argv[4];
+	int num_level = std::stoi(argv[5]);
+	cout << "In: " << img1_name <<"  Out: " << img2_name << endl;
+
 	try {
 
 		/*
@@ -57,9 +70,9 @@ int main(int argc, char **argv)
 			func_part1("images/part1/lincoln.png");
 		}
 		else if(part == "part2"){
-			CImg<double> left_img("images/part2/orange.jpg");
-			CImg<double> right_img("images/part2/apple.jpg");
-			CImg<double> mask_img("images/part2/mask.jpg");
+			CImg<double> left_img(img1_name.c_str());
+			CImg<double> right_img(img2_name.c_str());
+			CImg<double> mask_img(mask_name.c_str());
 			/*CImg<double> mask_img(left_img.width(), left_img.height(), 1, 3);
 
 			int mask_width = left_img.width();
@@ -70,7 +83,7 @@ int main(int argc, char **argv)
 			}*/
 
 			// Blending
-			blend(left_img, right_img, mask_img, 5, true);
+			blend(left_img, right_img, mask_img, num_level, true);
 		}
 		else if(part == "part3"){
 			// RANSAC
